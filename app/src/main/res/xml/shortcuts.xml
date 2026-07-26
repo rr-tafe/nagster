@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_nag"
+        android:enabled="true"
+        android:icon="@drawable/ic_stat_nag"
+        android:shortcutShortLabel="@string/shortcut_new_nag_short"
+        android:shortcutLongLabel="@string/shortcut_new_nag_long">
+        <intent
+            android:action="com.rahul.nagster.QUICK_ADD"
+            android:targetPackage="com.rahul.nagster"
+            android:targetClass="com.rahul.nagster.MainActivity" />
+    </shortcut>
+</shortcuts>

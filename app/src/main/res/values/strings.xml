@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Nagster</string>
+    <string name="shortcut_new_nag_short">New nag</string>
+    <string name="shortcut_new_nag_long">Create a new nag</string>
+</resources>
