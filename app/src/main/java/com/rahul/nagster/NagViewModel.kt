@@ -51,4 +51,16 @@ class NagViewModel(app: Application) : AndroidViewModel(app) {
             NagStore.setThemeMode(themeMode)
         }
     }
+
+    fun deleteEvents(timestamps: Set<Long>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            NagStore.deleteEvents(timestamps)
+        }
+    }
+
+    fun clearEvents() {
+        viewModelScope.launch(Dispatchers.IO) {
+            NagStore.clearEvents()
+        }
+    }
 }

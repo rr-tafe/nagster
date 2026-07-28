@@ -68,6 +68,22 @@ object NagStore {
         }
     }
 
+    fun deleteEvents(timestamps: Set<Long>) {
+        synchronized(lock) {
+            _data.value = _data.value.let {
+                it.copy(events = it.events.filterNot { e -> e.timestamp in timestamps })
+            }
+            persist()
+        }
+    }
+
+    fun clearEvents() {
+        synchronized(lock) {
+            _data.value = _data.value.copy(events = emptyList())
+            persist()
+        }
+    }
+
     private fun persist() {
         val f = file ?: return
         runCatching { f.writeText(json.encodeToString(StoreData.serializer(), _data.value)) }

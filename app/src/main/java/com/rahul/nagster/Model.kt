@@ -51,6 +51,9 @@ data class Nag(
     /** Optional ISO local date bounds for MODE_ROUTINE. */
     val startDate: String? = null,
     val endDate: String? = null,
+    /** Optional end-of-window time on endDate; null = end of day. */
+    val endHour: Int? = null,
+    val endMinute: Int? = null,
 ) {
     val effectiveMode: String
         get() = when {
@@ -77,11 +80,14 @@ data class Nag(
             else -> {
                 val start = startDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
                 val end = endDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                val endMillis = end?.atTime(endHour ?: 23, endMinute ?: 59)
+                    ?.atZone(zone)?.toInstant()?.toEpochMilli()
                 var day = if (start != null && start.isAfter(today)) start else today
                 repeat(400) {
-                    if (end != null && day.isAfter(end)) return null
+                    val fire = day.fireMillis()
+                    if (endMillis != null && fire > endMillis) return null
                     val allowedDay = daysOfWeek.isEmpty() || day.dayOfWeek.value in daysOfWeek
-                    if (allowedDay && day.fireMillis() > now) return day.fireMillis()
+                    if (allowedDay && fire > now) return fire
                     day = day.plusDays(1)
                 }
                 null
@@ -113,7 +119,12 @@ data class Nag(
                     ?.takeIf { it.isAfter(LocalDate.now()) }
                     ?.let { " · from ${it.format(df)}" } ?: ""
                 val until = endDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-                    ?.let { " · until ${it.format(df)}" } ?: ""
+                    ?.let {
+                        val t = if (endHour != null) {
+                            " %02d:%02d".format(endHour, endMinute ?: 0)
+                        } else ""
+                        " · until ${it.format(df)}$t"
+                    } ?: ""
                 "$days$from$until"
             }
         }
