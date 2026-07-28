@@ -57,6 +57,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -451,8 +452,12 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
     var dates by remember { mutableStateOf(existing?.dates?.toSet() ?: emptySet()) }
     var startDate by remember { mutableStateOf(existing?.startDate) }
     var endDate by remember { mutableStateOf(existing?.endDate) }
-    var intervalH by remember { mutableStateOf((existing?.intervalMinutes ?: 10) / 60) }
-    var intervalM by remember { mutableStateOf((existing?.intervalMinutes ?: 10) % 60) }
+    var intervalH by remember { mutableStateOf((existing?.intervalMinutes ?: 5) / 60) }
+    var intervalM by remember { mutableStateOf((existing?.intervalMinutes ?: 5) % 60) }
+    val intervalPresets = remember { listOf(1, 5, 15, 30) }
+    var intervalCustom by remember {
+        mutableStateOf((existing?.intervalMinutes ?: 5) !in intervalPresets)
+    }
     val existingGiveUp = existing?.giveUpAfterMinutes ?: 0
     var giveUpNever by remember { mutableStateOf(existingGiveUp == 0) }
     var giveUpD by remember { mutableStateOf(existingGiveUp / (24 * 60)) }
@@ -461,6 +466,12 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
     var snooze by remember { mutableStateOf(existing?.snoozeMinutes ?: 10) }
     var showTimePicker by remember { mutableStateOf(false) }
     var datePickerTarget by remember { mutableStateOf<String?>(null) }
+
+    val intervalTotal = (intervalH * 60 + intervalM).coerceAtLeast(1)
+    val giveUpTotal = (giveUpD * 24 * 60 + giveUpH * 60 + giveUpM).coerceAtLeast(5)
+    val valid = text.isNotBlank() &&
+        (mode != MODE_ROUTINE || days.isNotEmpty()) &&
+        (mode != MODE_DATES || dates.isNotEmpty())
 
     if (showTimePicker) {
         val state = rememberTimePickerState(
@@ -538,6 +549,37 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                 },
             )
         },
+        bottomBar = {
+            Surface(tonalElevation = 3.dp, shadowElevation = 8.dp) {
+                Button(
+                    onClick = {
+                        val base = existing ?: Nag()
+                        vm.save(
+                            base.copy(
+                                text = text.trim(),
+                                hour = hour,
+                                minute = minute,
+                                mode = mode,
+                                daysOfWeek = days,
+                                dates = dates.sorted(),
+                                startDate = startDate,
+                                endDate = endDate,
+                                intervalMinutes = intervalTotal,
+                                giveUpAfterMinutes = if (giveUpNever) 0 else giveUpTotal,
+                                snoozeMinutes = snooze,
+                                enabled = true,
+                            )
+                        ) { onClose() }
+                    },
+                    enabled = valid,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    Text(if (nagId == 0L) "Save & activate nag" else "Save changes")
+                }
+            }
+        },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -553,6 +595,93 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                 label = { Text("What should I nag you about?") },
                 modifier = Modifier.fillMaxWidth(),
             )
+
+            val previewNag = Nag(
+                text = text,
+                hour = hour,
+                minute = minute,
+                mode = mode,
+                daysOfWeek = days,
+                dates = dates.sorted(),
+                startDate = startDate,
+                endDate = endDate,
+                intervalMinutes = intervalTotal,
+            )
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        "🔔 ${text.ifBlank { "Your nag" }}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        buildString {
+                            append(previewNag.scheduleSummary())
+                            append(" — keeps nagging until you press DONE. ")
+                            append(
+                                if (giveUpNever) "Never gives up."
+                                else "Gives up after ${formatMinutes(giveUpTotal)}."
+                            )
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                color = MaterialTheme.colorScheme.primary,
+                            ) {
+                                Text(
+                                    "DONE",
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.padding(
+                                        horizontal = 10.dp, vertical = 4.dp
+                                    ),
+                                )
+                            }
+                            Text(
+                                "Completes it — quiet until the next scheduled time",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                color = MaterialTheme.colorScheme.surface,
+                            ) {
+                                Text(
+                                    "SNOOZE ${snooze}m",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.padding(
+                                        horizontal = 10.dp, vertical = 4.dp
+                                    ),
+                                )
+                            }
+                            Text(
+                                "Pauses it for $snooze min — still not done",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
 
             SectionLabel("Nag time")
             Card(modifier = Modifier.clickable { showTimePicker = true }) {
@@ -668,26 +797,44 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                 }
             }
 
-            val intervalTotal = (intervalH * 60 + intervalM).coerceAtLeast(1)
             SectionLabel("Nag every — ${formatMinutes(intervalTotal)}")
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                NumberWheel(0..23, intervalH, { intervalH = it })
-                WheelUnit("h")
-                NumberWheel(0..59, intervalM, { intervalM = it })
-                WheelUnit("min")
-            }
-            if (intervalH == 0 && intervalM == 0) {
-                Text(
-                    "Minimum interval is 1 minute — saving will use 1 min.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                intervalPresets.forEach { m ->
+                    FilterChip(
+                        selected = !intervalCustom && intervalTotal == m,
+                        onClick = {
+                            intervalCustom = false
+                            intervalH = 0
+                            intervalM = m
+                        },
+                        label = { Text("$m min") },
+                    )
+                }
+                FilterChip(
+                    selected = intervalCustom,
+                    onClick = { intervalCustom = true },
+                    label = { Text("Custom") },
                 )
             }
+            if (intervalCustom) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    NumberWheel(0..23, intervalH, { intervalH = it })
+                    WheelUnit("h")
+                    NumberWheel(0..59, intervalM, { intervalM = it })
+                    WheelUnit("min")
+                }
+                if (intervalH == 0 && intervalM == 0) {
+                    Text(
+                        "Minimum interval is 1 minute — saving will use 1 min.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
 
-            val giveUpTotal = (giveUpD * 24 * 60 + giveUpH * 60 + giveUpM).coerceAtLeast(5)
             SectionLabel(
                 if (giveUpNever) "Give up after — never"
                 else "Give up after — ${formatMinutes(giveUpTotal)}"
@@ -724,34 +871,6 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                 }
             }
 
-            val valid = text.isNotBlank() &&
-                (mode != MODE_ROUTINE || days.isNotEmpty()) &&
-                (mode != MODE_DATES || dates.isNotEmpty())
-            Button(
-                onClick = {
-                    val base = existing ?: Nag()
-                    vm.save(
-                        base.copy(
-                            text = text.trim(),
-                            hour = hour,
-                            minute = minute,
-                            mode = mode,
-                            daysOfWeek = days,
-                            dates = dates.sorted(),
-                            startDate = startDate,
-                            endDate = endDate,
-                            intervalMinutes = intervalTotal,
-                            giveUpAfterMinutes = if (giveUpNever) 0 else giveUpTotal,
-                            snoozeMinutes = snooze,
-                            enabled = true,
-                        )
-                    ) { onClose() }
-                },
-                enabled = valid,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Save")
-            }
         }
     }
 }
