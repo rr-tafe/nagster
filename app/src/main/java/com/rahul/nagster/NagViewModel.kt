@@ -45,4 +45,10 @@ class NagViewModel(app: Application) : AndroidViewModel(app) {
             finishSession(ctx, nag, logDone = true)
         }
     }
+
+    fun setThemeMode(themeMode: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            NagStore.setThemeMode(themeMode)
+        }
+    }
 }

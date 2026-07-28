@@ -54,6 +54,13 @@ object NagStore {
         }
     }
 
+    fun setThemeMode(themeMode: String) {
+        synchronized(lock) {
+            _data.value = _data.value.copy(themeMode = themeMode)
+            persist()
+        }
+    }
+
     fun logEvent(event: NagEvent) {
         synchronized(lock) {
             _data.value = _data.value.let { it.copy(events = (it.events + event).takeLast(500)) }

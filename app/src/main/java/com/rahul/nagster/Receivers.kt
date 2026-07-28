@@ -52,10 +52,15 @@ fun finishSession(context: Context, nag: Nag, logDone: Boolean) {
         NagStore.logEvent(NagEvent(nag.id, nag.text, System.currentTimeMillis(), "DONE"))
         doneFeedback(context, nag)
     }
+    val expired = when (nag.effectiveMode) {
+        MODE_ONCE -> true
+        MODE_DATES -> nag.nextStartMillis() == null
+        else -> false
+    }
     val finished = nag.copy(
         activeSince = null,
         snoozedUntil = null,
-        enabled = if (nag.isOneOff) false else nag.enabled,
+        enabled = if (expired) false else nag.enabled,
     )
     NagStore.upsert(finished)
     Notifications.cancel(context, nag.id)

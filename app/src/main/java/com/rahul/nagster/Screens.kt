@@ -8,38 +8,55 @@ import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,16 +64,20 @@ import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -68,15 +89,23 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
 @Composable
 fun NagsterTheme(content: @Composable () -> Unit) {
+    val data by NagStore.data.collectAsState()
+    val dark = when (data.themeMode) {
+        THEME_LIGHT -> false
+        THEME_DARK -> true
+        else -> isSystemInDarkTheme()
+    }
     val context = LocalContext.current
-    val scheme = if (isSystemInDarkTheme()) {
+    val scheme = if (dark) {
         dynamicDarkColorScheme(context)
     } else {
         dynamicLightColorScheme(context)
@@ -116,9 +145,15 @@ fun NagsterApp(startInQuickAdd: Boolean, vm: NagViewModel = viewModel()) {
 }
 
 private fun formatMillis(millis: Long): String {
-    val zdt = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
-    return zdt.format(DateTimeFormatter.ofPattern("EEE HH:mm"))
+    val zone = ZoneId.systemDefault()
+    val zdt = Instant.ofEpochMilli(millis).atZone(zone)
+    val pattern = if (zdt.toLocalDate() < LocalDate.now().plusDays(7)) "EEE HH:mm" else "d MMM HH:mm"
+    return zdt.format(DateTimeFormatter.ofPattern(pattern))
 }
+
+// ---------------------------------------------------------------------------
+// List screen
+// ---------------------------------------------------------------------------
 
 @Composable
 fun ListScreen(
@@ -144,6 +179,24 @@ fun ListScreen(
             TopAppBar(
                 title = { Text("Nagster") },
                 actions = {
+                    IconButton(onClick = {
+                        vm.setThemeMode(
+                            when (data.themeMode) {
+                                THEME_SYSTEM -> THEME_LIGHT
+                                THEME_LIGHT -> THEME_DARK
+                                else -> THEME_SYSTEM
+                            }
+                        )
+                    }) {
+                        Icon(
+                            when (data.themeMode) {
+                                THEME_LIGHT -> Icons.Filled.LightMode
+                                THEME_DARK -> Icons.Filled.DarkMode
+                                else -> Icons.Filled.BrightnessAuto
+                            },
+                            contentDescription = "Theme: ${data.themeMode.lowercase()}",
+                        )
+                    }
                     IconButton(onClick = onHistory) {
                         Icon(Icons.Filled.History, contentDescription = "History")
                     }
@@ -160,7 +213,7 @@ fun ListScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+            contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (!exactAlarmsOk) {
@@ -298,11 +351,14 @@ private fun NagCard(
                         )
                         TextButton(onClick = onDone) { Text("Mark done") }
                     }
-                    else -> Text(
-                        "Next: ${formatMillis(nag.nextStartMillis())}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    else -> {
+                        val next = nag.nextStartMillis()
+                        Text(
+                            if (next != null) "Next: ${formatMillis(next)}" else "No upcoming time",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             Switch(checked = nag.enabled, onCheckedChange = onToggle)
@@ -310,19 +366,101 @@ private fun NagCard(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Wheel roller
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun NumberWheel(
+    range: IntRange,
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    enabled: Boolean = true,
+) {
+    val values = remember(range) { range.toList() }
+    val itemHeight = 36.dp
+    val initialIndex = remember { values.indexOf(value).coerceAtLeast(0) }
+    val state = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
+    val fling = rememberSnapFlingBehavior(lazyListState = state)
+    val centered by remember { derivedStateOf { state.firstVisibleItemIndex } }
+
+    LaunchedEffect(state) {
+        snapshotFlow { state.isScrollInProgress }.collect { scrolling ->
+            if (!scrolling) {
+                onValueChange(values[state.firstVisibleItemIndex.coerceIn(0, values.lastIndex)])
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .height(itemHeight * 3)
+            .width(56.dp)
+            .alpha(if (enabled) 1f else 0.35f),
+    ) {
+        LazyColumn(
+            state = state,
+            flingBehavior = fling,
+            userScrollEnabled = enabled,
+            contentPadding = PaddingValues(vertical = itemHeight),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            items(values, key = { it }) { v ->
+                Box(
+                    modifier = Modifier.height(itemHeight).fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val isCentered = values.getOrNull(centered) == v
+                    Text(
+                        "$v",
+                        style = if (isCentered) MaterialTheme.typography.titleLarge
+                        else MaterialTheme.typography.bodyLarge,
+                        color = if (isCentered) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WheelUnit(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Edit screen
+// ---------------------------------------------------------------------------
+
 @Composable
 fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
     val data by vm.data.collectAsState()
     val existing = remember(nagId) { data.nags.find { it.id == nagId } }
+    val dateFmt = remember { DateTimeFormatter.ofPattern("EEE d MMM") }
 
     var text by remember { mutableStateOf(existing?.text ?: "") }
     var hour by remember { mutableStateOf(existing?.hour ?: 9) }
     var minute by remember { mutableStateOf(existing?.minute ?: 0) }
-    var days by remember { mutableStateOf(existing?.daysOfWeek ?: (1..7).toSet()) }
-    var interval by remember { mutableStateOf(existing?.intervalMinutes ?: 10) }
-    var giveUp by remember { mutableStateOf(existing?.giveUpAfterMinutes ?: 0) }
+    var mode by remember { mutableStateOf(existing?.effectiveMode ?: MODE_ROUTINE) }
+    var days by remember { mutableStateOf(existing?.daysOfWeek?.ifEmpty { (1..7).toSet() } ?: (1..7).toSet()) }
+    var dates by remember { mutableStateOf(existing?.dates?.toSet() ?: emptySet()) }
+    var startDate by remember { mutableStateOf(existing?.startDate) }
+    var endDate by remember { mutableStateOf(existing?.endDate) }
+    var intervalH by remember { mutableStateOf((existing?.intervalMinutes ?: 10) / 60) }
+    var intervalM by remember { mutableStateOf((existing?.intervalMinutes ?: 10) % 60) }
+    val existingGiveUp = existing?.giveUpAfterMinutes ?: 0
+    var giveUpNever by remember { mutableStateOf(existingGiveUp == 0) }
+    var giveUpD by remember { mutableStateOf(existingGiveUp / (24 * 60)) }
+    var giveUpH by remember { mutableStateOf((existingGiveUp % (24 * 60)) / 60) }
+    var giveUpM by remember { mutableStateOf(if (existingGiveUp == 0) 0 else existingGiveUp % 60) }
     var snooze by remember { mutableStateOf(existing?.snoozeMinutes ?: 10) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var datePickerTarget by remember { mutableStateOf<String?>(null) }
 
     if (showTimePicker) {
         val state = rememberTimePickerState(
@@ -342,6 +480,41 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
             },
             text = { TimePicker(state = state) },
         )
+    }
+
+    if (datePickerTarget != null) {
+        val initial = when (datePickerTarget) {
+            "START" -> startDate
+            "END" -> endDate
+            else -> null
+        }?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        val dpState = rememberDatePickerState(
+            initialSelectedDateMillis = (initial ?: LocalDate.now())
+                .atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { datePickerTarget = null },
+            confirmButton = {
+                TextButton(onClick = {
+                    val ms = dpState.selectedDateMillis
+                    if (ms != null) {
+                        val iso = Instant.ofEpochMilli(ms)
+                            .atZone(ZoneOffset.UTC).toLocalDate().toString()
+                        when (datePickerTarget) {
+                            "ADD" -> dates = dates + iso
+                            "START" -> startDate = iso
+                            "END" -> endDate = iso
+                        }
+                    }
+                    datePickerTarget = null
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { datePickerTarget = null }) { Text("Cancel") }
+            },
+        ) {
+            DatePicker(state = dpState)
+        }
     }
 
     Scaffold(
@@ -381,10 +554,8 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            SectionLabel("Start time")
-            Card(
-                modifier = Modifier.clickable { showTimePicker = true },
-            ) {
+            SectionLabel("Nag time")
+            Card(modifier = Modifier.clickable { showTimePicker = true }) {
                 Text(
                     "%02d:%02d".format(hour, minute),
                     style = MaterialTheme.typography.headlineMedium,
@@ -393,51 +564,153 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
             }
 
             SectionLabel("Repeat on")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                (1..7).forEach { day ->
-                    FilterChip(
-                        selected = day in days,
-                        onClick = {
-                            days = if (day in days) days - day else days + day
-                        },
-                        label = {
-                            Text(
-                                DayOfWeek.of(day)
-                                    .getDisplayName(TextStyle.SHORT, Locale.getDefault())
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                listOf(
+                    MODE_ROUTINE to "Routine",
+                    MODE_DATES to "Pick dates",
+                    MODE_ONCE to "Just once",
+                ).forEachIndexed { i, (m, label) ->
+                    SegmentedButton(
+                        selected = mode == m,
+                        onClick = { mode = m },
+                        shape = SegmentedButtonDefaults.itemShape(index = i, count = 3),
+                    ) { Text(label) }
+                }
+            }
+
+            when (mode) {
+                MODE_ROUTINE -> {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        (1..7).forEach { day ->
+                            FilterChip(
+                                selected = day in days,
+                                onClick = {
+                                    days = if (day in days) days - day else days + day
+                                },
+                                label = {
+                                    Text(
+                                        DayOfWeek.of(day)
+                                            .getDisplayName(TextStyle.SHORT, Locale.getDefault())
+                                    )
+                                },
                             )
-                        },
+                        }
+                    }
+                    if (days.isEmpty()) {
+                        Text(
+                            "Select at least one day.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        DateField(
+                            label = "Starts on",
+                            value = startDate?.let {
+                                runCatching { LocalDate.parse(it).format(dateFmt) }.getOrNull()
+                            } ?: "Today",
+                            onClick = { datePickerTarget = "START" },
+                            onClear = if (startDate != null) ({ startDate = null }) else null,
+                        )
+                        DateField(
+                            label = "Ends on",
+                            value = endDate?.let {
+                                runCatching { LocalDate.parse(it).format(dateFmt) }.getOrNull()
+                            } ?: "Never",
+                            onClick = { datePickerTarget = "END" },
+                            onClear = if (endDate != null) ({ endDate = null }) else null,
+                        )
+                    }
+                }
+                MODE_DATES -> {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        dates.sorted().forEach { d ->
+                            InputChip(
+                                selected = false,
+                                onClick = { dates = dates - d },
+                                label = {
+                                    Text(
+                                        runCatching {
+                                            LocalDate.parse(d).format(dateFmt)
+                                        }.getOrDefault(d)
+                                    )
+                                },
+                                trailingIcon = {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = "Remove",
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                },
+                            )
+                        }
+                        AssistChip(
+                            onClick = { datePickerTarget = "ADD" },
+                            label = { Text("+ Add date") },
+                        )
+                    }
+                    if (dates.isEmpty()) {
+                        Text(
+                            "Add at least one date.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+                else -> {
+                    Text(
+                        "Fires at the next occurrence of the nag time, then turns itself off.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-            if (days.isEmpty()) {
+
+            val intervalTotal = (intervalH * 60 + intervalM).coerceAtLeast(1)
+            SectionLabel("Nag every — ${formatMinutes(intervalTotal)}")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                NumberWheel(0..23, intervalH, { intervalH = it })
+                WheelUnit("h")
+                NumberWheel(0..59, intervalM, { intervalM = it })
+                WheelUnit("min")
+            }
+            if (intervalH == 0 && intervalM == 0) {
                 Text(
-                    "No days selected — this nag fires once at the next occurrence of the start time, then turns itself off.",
+                    "Minimum interval is 1 minute — saving will use 1 min.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            SectionLabel("Nag every")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(1, 2, 5, 10, 15, 30, 60).forEach { m ->
-                    FilterChip(
-                        selected = interval == m,
-                        onClick = { interval = m },
-                        label = { Text("$m min") },
+            val giveUpTotal = (giveUpD * 24 * 60 + giveUpH * 60 + giveUpM).coerceAtLeast(5)
+            SectionLabel(
+                if (giveUpNever) "Give up after — never"
+                else "Give up after — ${formatMinutes(giveUpTotal)}"
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                NumberWheel(0..7, giveUpD, { giveUpD = it }, enabled = !giveUpNever)
+                WheelUnit("d")
+                NumberWheel(0..23, giveUpH, { giveUpH = it }, enabled = !giveUpNever)
+                WheelUnit("h")
+                NumberWheel(0..59, giveUpM, { giveUpM = it }, enabled = !giveUpNever)
+                WheelUnit("min")
+                Spacer(Modifier.width(8.dp))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Switch(checked = giveUpNever, onCheckedChange = { giveUpNever = it })
+                    Text(
+                        "Never",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            }
-
-            SectionLabel("Give up after")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(0 to "Never", 60 to "1 h", 180 to "3 h", 360 to "6 h", 720 to "12 h")
-                    .forEach { (m, label) ->
-                        FilterChip(
-                            selected = giveUp == m,
-                            onClick = { giveUp = m },
-                            label = { Text(label) },
-                        )
-                    }
             }
 
             SectionLabel("Snooze length")
@@ -451,7 +724,10 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                 }
             }
 
-            androidx.compose.material3.Button(
+            val valid = text.isNotBlank() &&
+                (mode != MODE_ROUTINE || days.isNotEmpty()) &&
+                (mode != MODE_DATES || dates.isNotEmpty())
+            Button(
                 onClick = {
                     val base = existing ?: Nag()
                     vm.save(
@@ -459,18 +735,57 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                             text = text.trim(),
                             hour = hour,
                             minute = minute,
+                            mode = mode,
                             daysOfWeek = days,
-                            intervalMinutes = interval,
-                            giveUpAfterMinutes = giveUp,
+                            dates = dates.sorted(),
+                            startDate = startDate,
+                            endDate = endDate,
+                            intervalMinutes = intervalTotal,
+                            giveUpAfterMinutes = if (giveUpNever) 0 else giveUpTotal,
                             snoozeMinutes = snooze,
                             enabled = true,
                         )
                     ) { onClose() }
                 },
-                enabled = text.isNotBlank(),
+                enabled = valid,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Save")
+            }
+        }
+    }
+}
+
+@Composable
+private fun DateField(
+    label: String,
+    value: String,
+    onClick: () -> Unit,
+    onClear: (() -> Unit)?,
+) {
+    Column {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Card(modifier = Modifier.clickable(onClick = onClick)) {
+                Text(
+                    value,
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
+            if (onClear != null) {
+                IconButton(onClick = onClear, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "Clear $label",
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
             }
         }
     }
@@ -484,6 +799,10 @@ private fun SectionLabel(text: String) {
         color = MaterialTheme.colorScheme.primary,
     )
 }
+
+// ---------------------------------------------------------------------------
+// History screen
+// ---------------------------------------------------------------------------
 
 @Composable
 fun HistoryScreen(vm: NagViewModel, onClose: () -> Unit) {
@@ -509,7 +828,7 @@ fun HistoryScreen(vm: NagViewModel, onClose: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+            contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (events.isEmpty()) {
