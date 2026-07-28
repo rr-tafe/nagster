@@ -35,6 +35,25 @@ object Scheduler {
         scheduleAt(context, nag, nextTrigger(nag))
     }
 
+    /**
+     * Reschedule after the user creates or edits a nag. When today's occurrence
+     * has already passed but its window is still open, start nagging right away
+     * instead of waiting for the next scheduled day — unless it was already
+     * confirmed done since that occurrence.
+     */
+    fun rescheduleAfterEdit(context: Context, nag: Nag) {
+        val now = System.currentTimeMillis()
+        val missed = nag.liveMissedStart(now)
+        val alreadyDone = missed != null && NagStore.data.value.events.any {
+            it.nagId == nag.id && it.action == "DONE" && it.timestamp >= missed
+        }
+        if (missed != null && nag.activeSince == null && !alreadyDone) {
+            scheduleAt(context, nag, now + 1_000)
+        } else {
+            reschedule(context, nag)
+        }
+    }
+
     fun cancel(context: Context, nagId: Long) {
         context.getSystemService(AlarmManager::class.java)
             .cancel(firePendingIntent(context, nagId))

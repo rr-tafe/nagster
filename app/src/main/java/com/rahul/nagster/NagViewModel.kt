@@ -17,7 +17,7 @@ class NagViewModel(app: Application) : AndroidViewModel(app) {
     fun save(nag: Nag, onSaved: () -> Unit = {}) {
         viewModelScope.launch(Dispatchers.IO) {
             val saved = NagStore.upsert(nag)
-            Scheduler.reschedule(ctx, saved)
+            Scheduler.rescheduleAfterEdit(ctx, saved)
             withContext(Dispatchers.Main) { onSaved() }
         }
     }

@@ -95,40 +95,85 @@ data class Nag(
         }
     }
 
+    /**
+     * Today's occurrence when its time has already passed but its nagging window
+     * is still open, so a freshly saved nag starts nagging now instead of waiting
+     * for the next scheduled day. Only applies when a window bound actually
+     * exists (an end date/time or a give-up duration) — an unbounded nag whose
+     * time passed hours ago should wait rather than ambush the user.
+     */
+    fun liveMissedStart(now: Long = System.currentTimeMillis()): Long? {
+        if (!enabled) return null
+        val zone = ZoneId.systemDefault()
+        val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+        val scheduledToday = when (effectiveMode) {
+            MODE_ROUTINE -> {
+                val start = startDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                (start == null || !start.isAfter(today)) &&
+                    (daysOfWeek.isEmpty() || today.dayOfWeek.value in daysOfWeek)
+            }
+            MODE_DATES -> today.toString() in dates
+            else -> false
+        }
+        if (!scheduledToday) return null
+
+        val fire = today.atTime(hour, minute).atZone(zone).toInstant().toEpochMilli()
+        if (fire > now) return null
+
+        val endMillis = if (effectiveMode == MODE_ROUTINE) {
+            endDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                ?.atTime(endHour ?: 23, endMinute ?: 59)
+                ?.atZone(zone)?.toInstant()?.toEpochMilli()
+        } else null
+        val giveUpMillis =
+            if (giveUpAfterMinutes > 0) fire + giveUpAfterMinutes * 60_000L else null
+        val bound = when {
+            endMillis != null && giveUpMillis != null -> minOf(endMillis, giveUpMillis)
+            endMillis != null -> endMillis
+            giveUpMillis != null -> giveUpMillis
+            else -> return null
+        }
+        return if (now <= bound) fire else null
+    }
+
+    /** True when nothing this nag is configured for can ever fire again. */
+    fun willNeverFire(now: Long = System.currentTimeMillis()): Boolean =
+        nextStartMillis(now) == null && liveMissedStart(now) == null
+
     fun scheduleSummary(): String {
         val time = "%02d:%02d".format(hour, minute)
         val df = DateTimeFormatter.ofPattern("d MMM")
-        val head = when (effectiveMode) {
-            MODE_ONCE -> "Once"
+        val parts = mutableListOf<String>()
+        when (effectiveMode) {
+            MODE_ONCE -> parts += "Once at $time"
             MODE_DATES -> {
                 val parsed = dates
                     .mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
                     .sorted()
-                when {
+                val head = when {
                     parsed.isEmpty() -> "No dates"
                     parsed.size <= 2 -> parsed.joinToString(", ") { it.format(df) }
                     else -> "${parsed.size} dates"
                 }
+                parts += "$head at $time"
             }
             else -> {
                 val days = if (daysOfWeek.size == 7) "Every day"
                 else daysOfWeek.sorted().joinToString(" ") {
                     DayOfWeek.of(it).getDisplayName(TextStyle.SHORT, Locale.getDefault())
                 }
-                val from = startDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                parts += "$days at $time"
+                startDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
                     ?.takeIf { it.isAfter(LocalDate.now()) }
-                    ?.let { " · from ${it.format(df)}" } ?: ""
-                val until = endDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-                    ?.let {
-                        val t = if (endHour != null) {
-                            " %02d:%02d".format(endHour, endMinute ?: 0)
-                        } else ""
-                        " · until ${it.format(df)}$t"
-                    } ?: ""
-                "$days$from$until"
+                    ?.let { parts += "from ${it.format(df)}" }
+                endDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let {
+                    val t = if (endHour != null) " %02d:%02d".format(endHour, endMinute ?: 0) else ""
+                    parts += "until ${it.format(df)}$t"
+                }
             }
         }
-        return "$head at $time · every ${formatMinutes(intervalMinutes)}"
+        parts += "every ${formatMinutes(intervalMinutes)}"
+        return parts.joinToString(" · ")
     }
 }
 

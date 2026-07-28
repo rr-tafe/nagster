@@ -380,11 +380,27 @@ private fun NagCard(
                     }
                     else -> {
                         val next = nag.nextStartMillis()
-                        Text(
-                            if (next != null) "Next: ${formatMillis(next)}" else "No upcoming time",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        if (next != null || !nag.willNeverFire()) {
+                            Text(
+                                if (next != null) "Next: ${formatMillis(next)}" else "Due now",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                color = MaterialTheme.colorScheme.errorContainer,
+                            ) {
+                                Text(
+                                    "⚠ Won't fire — tap to fix the time or end date",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.padding(
+                                        horizontal = 8.dp, vertical = 4.dp
+                                    ),
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -561,6 +577,52 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
         (mode != MODE_ROUTINE || days.isNotEmpty()) &&
         (mode != MODE_DATES || dates.isNotEmpty())
 
+    var wontFireWarning by remember { mutableStateOf(false) }
+
+    fun buildNag(): Nag = (existing ?: Nag()).copy(
+        text = text.trim(),
+        hour = hour,
+        minute = minute,
+        mode = mode,
+        daysOfWeek = days,
+        dates = dates.sorted(),
+        startDate = startDate,
+        endDate = endDate,
+        endHour = if (endDate != null) endHour else null,
+        endMinute = if (endDate != null) endMinute else null,
+        intervalMinutes = intervalTotal,
+        giveUpAfterMinutes = effectiveGiveUp,
+        snoozeMinutes = snooze,
+        enabled = true,
+    )
+
+    fun persist() = vm.save(buildNag()) { onClose() }
+
+    if (wontFireWarning) {
+        AlertDialog(
+            onDismissRequest = { wontFireWarning = false },
+            title = { Text("This nag will never fire") },
+            text = {
+                Text(
+                    "Its next scheduled time falls outside the dates you set, so no " +
+                        "notification will ever be sent. Check the nag time and the " +
+                        "Ends date before saving."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    wontFireWarning = false
+                }) { Text("Go back and fix") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    wontFireWarning = false
+                    persist()
+                }) { Text("Save anyway") }
+            },
+        )
+    }
+
     if (timePickerTarget != null) {
         val isEnd = timePickerTarget == "END"
         val state = rememberTimePickerState(
@@ -655,25 +717,7 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
             FloatingActionButton(
                 onClick = {
                     if (!valid) return@FloatingActionButton
-                    val base = existing ?: Nag()
-                    vm.save(
-                        base.copy(
-                            text = text.trim(),
-                            hour = hour,
-                            minute = minute,
-                            mode = mode,
-                            daysOfWeek = days,
-                            dates = dates.sorted(),
-                            startDate = startDate,
-                            endDate = endDate,
-                            endHour = if (endDate != null) endHour else null,
-                            endMinute = if (endDate != null) endMinute else null,
-                            intervalMinutes = intervalTotal,
-                            giveUpAfterMinutes = effectiveGiveUp,
-                            snoozeMinutes = snooze,
-                            enabled = true,
-                        )
-                    ) { onClose() }
+                    if (buildNag().willNeverFire()) wontFireWarning = true else persist()
                 },
                 containerColor = if (valid) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.surfaceVariant,
