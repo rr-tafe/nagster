@@ -210,6 +210,28 @@ fun ListScreen(
                     onDone = { vm.markDone(nag) },
                 )
             }
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    TextButton(onClick = {
+                        context.startActivity(
+                            Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://www.buymeacoffee.com/fanciful.unicorn"),
+                            )
+                        )
+                    }) {
+                        Text(
+                            "☕ Enjoying Nagster? Buy me a coffee",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         }
     }
 }
