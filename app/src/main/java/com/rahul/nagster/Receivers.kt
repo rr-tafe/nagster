@@ -3,6 +3,11 @@ package com.rahul.nagster
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
+import android.os.VibrationEffect
+import android.os.VibratorManager
+import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -18,10 +23,34 @@ private fun BroadcastReceiver.async(block: suspend () -> Unit) {
     }
 }
 
+/** A crisp rise-and-click buzz plus a confirmation toast when a nag is confirmed done. */
+private fun doneFeedback(context: Context, nag: Nag) {
+    runCatching {
+        val vibrator = context.getSystemService(VibratorManager::class.java).defaultVibrator
+        val effect = if (vibrator.areAllPrimitivesSupported(
+                VibrationEffect.Composition.PRIMITIVE_QUICK_RISE,
+                VibrationEffect.Composition.PRIMITIVE_CLICK,
+            )
+        ) {
+            VibrationEffect.startComposition()
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_QUICK_RISE, 0.6f)
+                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, 1.0f, 50)
+                .compose()
+        } else {
+            VibrationEffect.createPredefined(VibrationEffect.EFFECT_DOUBLE_CLICK)
+        }
+        vibrator.vibrate(effect)
+    }
+    Handler(Looper.getMainLooper()).post {
+        Toast.makeText(context, "Done: ${nag.text}", Toast.LENGTH_SHORT).show()
+    }
+}
+
 /** Ends the current nagging session and arms the next scheduled occurrence. */
 fun finishSession(context: Context, nag: Nag, logDone: Boolean) {
     if (logDone) {
         NagStore.logEvent(NagEvent(nag.id, nag.text, System.currentTimeMillis(), "DONE"))
+        doneFeedback(context, nag)
     }
     val finished = nag.copy(
         activeSince = null,

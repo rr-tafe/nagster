@@ -49,7 +49,7 @@ object Notifications {
             .setContentIntent(contentIntent)
             .setAutoCancel(false)
             .setOnlyAlertOnce(false)
-            .addAction(0, "Done ✓", actionIntent(NagActionReceiver.ACTION_DONE))
+            .addAction(0, "DONE", actionIntent(NagActionReceiver.ACTION_DONE))
             .addAction(0, "Snooze ${nag.snoozeMinutes}m", actionIntent(NagActionReceiver.ACTION_SNOOZE))
             .build()
 

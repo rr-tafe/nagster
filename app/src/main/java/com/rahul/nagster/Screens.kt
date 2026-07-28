@@ -296,7 +296,7 @@ private fun NagCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
-                        TextButton(onClick = onDone) { Text("Mark done ✓") }
+                        TextButton(onClick = onDone) { Text("Mark done") }
                     }
                     else -> Text(
                         "Next: ${formatMillis(nag.nextStartMillis())}",
