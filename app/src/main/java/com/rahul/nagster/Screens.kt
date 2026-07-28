@@ -13,6 +13,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -28,9 +29,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.Close
@@ -91,6 +94,7 @@ import androidx.navigation.navArgument
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -452,30 +456,40 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
     var dates by remember { mutableStateOf(existing?.dates?.toSet() ?: emptySet()) }
     var startDate by remember { mutableStateOf(existing?.startDate) }
     var endDate by remember { mutableStateOf(existing?.endDate) }
+
     var intervalH by remember { mutableStateOf((existing?.intervalMinutes ?: 5) / 60) }
     var intervalM by remember { mutableStateOf((existing?.intervalMinutes ?: 5) % 60) }
-    val intervalPresets = remember { listOf(1, 5, 15, 30) }
+    val intervalPresets = remember { listOf(1, 5, 15) }
     var intervalCustom by remember {
         mutableStateOf((existing?.intervalMinutes ?: 5) !in intervalPresets)
     }
+
     val existingGiveUp = existing?.giveUpAfterMinutes ?: 0
-    var giveUpNever by remember { mutableStateOf(existingGiveUp == 0) }
+    val giveUpPresets = remember { listOf(0 to "Never", 60 to "1 Hour", 1440 to "1 Day") }
+    var giveUpCustom by remember {
+        mutableStateOf(existingGiveUp !in giveUpPresets.map { it.first })
+    }
+    var giveUpPreset by remember {
+        mutableStateOf(if (existingGiveUp in giveUpPresets.map { it.first }) existingGiveUp else 0)
+    }
     var giveUpD by remember { mutableStateOf(existingGiveUp / (24 * 60)) }
     var giveUpH by remember { mutableStateOf((existingGiveUp % (24 * 60)) / 60) }
     var giveUpM by remember { mutableStateOf(if (existingGiveUp == 0) 0 else existingGiveUp % 60) }
+
     var snooze by remember { mutableStateOf(existing?.snoozeMinutes ?: 10) }
     var showTimePicker by remember { mutableStateOf(false) }
     var datePickerTarget by remember { mutableStateOf<String?>(null) }
 
     val intervalTotal = (intervalH * 60 + intervalM).coerceAtLeast(1)
     val giveUpTotal = (giveUpD * 24 * 60 + giveUpH * 60 + giveUpM).coerceAtLeast(5)
+    val effectiveGiveUp = if (giveUpCustom) giveUpTotal else giveUpPreset
     val valid = text.isNotBlank() &&
         (mode != MODE_ROUTINE || days.isNotEmpty()) &&
         (mode != MODE_DATES || dates.isNotEmpty())
 
     if (showTimePicker) {
         val state = rememberTimePickerState(
-            initialHour = hour, initialMinute = minute, is24Hour = true
+            initialHour = hour, initialMinute = minute, is24Hour = false
         )
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
@@ -531,7 +545,7 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (nagId == 0L) "New nag" else "Edit nag") },
+                title = { Text(if (nagId == 0L) "New Nag" else "Edit Nag") },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -565,7 +579,7 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                                 startDate = startDate,
                                 endDate = endDate,
                                 intervalMinutes = intervalTotal,
-                                giveUpAfterMinutes = if (giveUpNever) 0 else giveUpTotal,
+                                giveUpAfterMinutes = effectiveGiveUp,
                                 snoozeMinutes = snooze,
                                 enabled = true,
                             )
@@ -576,7 +590,7 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                 ) {
-                    Text(if (nagId == 0L) "Save & activate nag" else "Save changes")
+                    Text(if (nagId == 0L) "Save & Activate Nag" else "Save Changes")
                 }
             }
         },
@@ -589,160 +603,170 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                label = { Text("What should I nag you about?") },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            val previewNag = Nag(
-                text = text,
-                hour = hour,
-                minute = minute,
-                mode = mode,
-                daysOfWeek = days,
-                dates = dates.sorted(),
-                startDate = startDate,
-                endDate = endDate,
-                intervalMinutes = intervalTotal,
-            )
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+            SectionCard("What & When") {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("What should I nag you about?") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text(
-                        "🔔 ${text.ifBlank { "Your nag" }}",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        buildString {
-                            append(previewNag.scheduleSummary())
-                            append(" — keeps nagging until you press DONE. ")
-                            append(
-                                if (giveUpNever) "Never gives up."
-                                else "Gives up after ${formatMinutes(giveUpTotal)}."
-                            )
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Surface(
-                                shape = MaterialTheme.shapes.small,
-                                color = MaterialTheme.colorScheme.primary,
-                            ) {
-                                Text(
-                                    "DONE",
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.padding(
-                                        horizontal = 10.dp, vertical = 4.dp
-                                    ),
-                                )
-                            }
-                            Text(
-                                "Completes it — quiet until the next scheduled time",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Surface(
-                                shape = MaterialTheme.shapes.small,
-                                color = MaterialTheme.colorScheme.surface,
-                            ) {
-                                Text(
-                                    "SNOOZE ${snooze}m",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.padding(
-                                        horizontal = 10.dp, vertical = 4.dp
-                                    ),
-                                )
-                            }
-                            Text(
-                                "Pauses it for $snooze min — still not done",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                    Surface(
+                        onClick = { showTimePicker = true },
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                    ) {
+                        Text(
+                            LocalTime.of(hour, minute)
+                                .format(DateTimeFormatter.ofPattern("hh:mm a"))
+                                .uppercase(),
+                            style = MaterialTheme.typography.headlineSmall,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        )
                     }
+                    Text(
+                        "Tap to adjust start time",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 
-            SectionLabel("Nag time")
-            Card(modifier = Modifier.clickable { showTimePicker = true }) {
+            SectionCard("Persistence Rules") {
                 Text(
-                    "%02d:%02d".format(hour, minute),
-                    style = MaterialTheme.typography.headlineMedium,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                    "Nag interval (repeats until Done)",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    intervalPresets.forEach { m ->
+                        FilterChip(
+                            selected = !intervalCustom && intervalTotal == m,
+                            onClick = {
+                                intervalCustom = false
+                                intervalH = 0
+                                intervalM = m
+                            },
+                            label = { Text("${m}m") },
+                        )
+                    }
+                    FilterChip(
+                        selected = intervalCustom,
+                        onClick = { intervalCustom = true },
+                        label = { Text("Custom…") },
+                    )
+                }
+                if (intervalCustom) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        NumberWheel(0..23, intervalH, { intervalH = it })
+                        WheelUnit("h")
+                        NumberWheel(0..59, intervalM, { intervalM = it })
+                        WheelUnit("min")
+                    }
+                }
+
+                Text("Give up after", style = MaterialTheme.typography.bodyMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    giveUpPresets.forEach { (m, label) ->
+                        FilterChip(
+                            selected = !giveUpCustom && giveUpPreset == m,
+                            onClick = {
+                                giveUpCustom = false
+                                giveUpPreset = m
+                            },
+                            label = { Text(label) },
+                        )
+                    }
+                    FilterChip(
+                        selected = giveUpCustom,
+                        onClick = { giveUpCustom = true },
+                        label = { Text("Custom…") },
+                    )
+                }
+                if (giveUpCustom) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        NumberWheel(0..7, giveUpD, { giveUpD = it })
+                        WheelUnit("d")
+                        NumberWheel(0..23, giveUpH, { giveUpH = it })
+                        WheelUnit("h")
+                        NumberWheel(0..59, giveUpM, { giveUpM = it })
+                        WheelUnit("min")
+                    }
+                }
+
+                Text("Snooze length", style = MaterialTheme.typography.bodyMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(5, 10, 15, 30).forEach { m ->
+                        FilterChip(
+                            selected = snooze == m,
+                            onClick = { snooze = m },
+                            label = { Text("$m min") },
+                        )
+                    }
+                }
+
+                Text(
+                    "↻ Repeats every ${formatMinutes(intervalTotal)} until completed · " +
+                        if (effectiveGiveUp == 0) "never gives up"
+                        else "gives up after ${formatMinutes(effectiveGiveUp)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
 
-            SectionLabel("Repeat on")
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                listOf(
-                    MODE_ROUTINE to "Routine",
-                    MODE_DATES to "Pick dates",
-                    MODE_ONCE to "Just once",
-                ).forEachIndexed { i, (m, label) ->
-                    SegmentedButton(
-                        selected = mode == m,
-                        onClick = { mode = m },
-                        shape = SegmentedButtonDefaults.itemShape(index = i, count = 3),
-                    ) { Text(label) }
+            SectionCard("Schedule") {
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    listOf(
+                        MODE_ROUTINE to "Routine",
+                        MODE_DATES to "Pick Dates",
+                        MODE_ONCE to "Just Once",
+                    ).forEachIndexed { i, (m, label) ->
+                        SegmentedButton(
+                            selected = mode == m,
+                            onClick = { mode = m },
+                            shape = SegmentedButtonDefaults.itemShape(index = i, count = 3),
+                        ) { Text(label) }
+                    }
                 }
-            }
 
-            when (mode) {
-                MODE_ROUTINE -> {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        (1..7).forEach { day ->
-                            FilterChip(
-                                selected = day in days,
-                                onClick = {
-                                    days = if (day in days) days - day else days + day
-                                },
-                                label = {
-                                    Text(
-                                        DayOfWeek.of(day)
-                                            .getDisplayName(TextStyle.SHORT, Locale.getDefault())
-                                    )
-                                },
+                when (mode) {
+                    MODE_ROUTINE -> {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            (1..7).forEach { day ->
+                                DayDot(
+                                    day = day,
+                                    selected = day in days,
+                                    onClick = {
+                                        days = if (day in days) days - day else days + day
+                                    },
+                                )
+                            }
+                        }
+                        if (days.isEmpty()) {
+                            Text(
+                                "Select at least one day.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
                             )
                         }
-                    }
-                    if (days.isEmpty()) {
-                        Text(
-                            "Select at least one day.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        DateField(
-                            label = "Starts on",
+                        DateRow(
+                            label = "Starts",
                             value = startDate?.let {
                                 runCatching { LocalDate.parse(it).format(dateFmt) }.getOrNull()
                             } ?: "Today",
                             onClick = { datePickerTarget = "START" },
                             onClear = if (startDate != null) ({ startDate = null }) else null,
                         )
-                        DateField(
-                            label = "Ends on",
+                        DateRow(
+                            label = "Ends",
                             value = endDate?.let {
                                 runCatching { LocalDate.parse(it).format(dateFmt) }.getOrNull()
                             } ?: "Never",
@@ -750,173 +774,132 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                             onClear = if (endDate != null) ({ endDate = null }) else null,
                         )
                     }
-                }
-                MODE_DATES -> {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        dates.sorted().forEach { d ->
-                            InputChip(
-                                selected = false,
-                                onClick = { dates = dates - d },
-                                label = {
-                                    Text(
-                                        runCatching {
-                                            LocalDate.parse(d).format(dateFmt)
-                                        }.getOrDefault(d)
-                                    )
-                                },
-                                trailingIcon = {
-                                    Icon(
-                                        Icons.Filled.Close,
-                                        contentDescription = "Remove",
-                                        modifier = Modifier.size(16.dp),
-                                    )
-                                },
+                    MODE_DATES -> {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            dates.sorted().forEach { d ->
+                                InputChip(
+                                    selected = false,
+                                    onClick = { dates = dates - d },
+                                    label = {
+                                        Text(
+                                            runCatching {
+                                                LocalDate.parse(d).format(dateFmt)
+                                            }.getOrDefault(d)
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        Icon(
+                                            Icons.Filled.Close,
+                                            contentDescription = "Remove",
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    },
+                                )
+                            }
+                            AssistChip(
+                                onClick = { datePickerTarget = "ADD" },
+                                label = { Text("+ Add date") },
                             )
                         }
-                        AssistChip(
-                            onClick = { datePickerTarget = "ADD" },
-                            label = { Text("+ Add date") },
-                        )
+                        if (dates.isEmpty()) {
+                            Text(
+                                "Add at least one date.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
-                    if (dates.isEmpty()) {
+                    else -> {
                         Text(
-                            "Add at least one date.",
+                            "Fires at the next occurrence of the nag time, then turns itself off.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
-                else -> {
-                    Text(
-                        "Fires at the next occurrence of the nag time, then turns itself off.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
-
-            SectionLabel("Nag every — ${formatMinutes(intervalTotal)}")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                intervalPresets.forEach { m ->
-                    FilterChip(
-                        selected = !intervalCustom && intervalTotal == m,
-                        onClick = {
-                            intervalCustom = false
-                            intervalH = 0
-                            intervalM = m
-                        },
-                        label = { Text("$m min") },
-                    )
-                }
-                FilterChip(
-                    selected = intervalCustom,
-                    onClick = { intervalCustom = true },
-                    label = { Text("Custom") },
-                )
-            }
-            if (intervalCustom) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    NumberWheel(0..23, intervalH, { intervalH = it })
-                    WheelUnit("h")
-                    NumberWheel(0..59, intervalM, { intervalM = it })
-                    WheelUnit("min")
-                }
-                if (intervalH == 0 && intervalM == 0) {
-                    Text(
-                        "Minimum interval is 1 minute — saving will use 1 min.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            SectionLabel(
-                if (giveUpNever) "Give up after — never"
-                else "Give up after — ${formatMinutes(giveUpTotal)}"
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                NumberWheel(0..7, giveUpD, { giveUpD = it }, enabled = !giveUpNever)
-                WheelUnit("d")
-                NumberWheel(0..23, giveUpH, { giveUpH = it }, enabled = !giveUpNever)
-                WheelUnit("h")
-                NumberWheel(0..59, giveUpM, { giveUpM = it }, enabled = !giveUpNever)
-                WheelUnit("min")
-                Spacer(Modifier.width(8.dp))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Switch(checked = giveUpNever, onCheckedChange = { giveUpNever = it })
-                    Text(
-                        "Never",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            SectionLabel("Snooze length")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(5, 10, 15, 30).forEach { m ->
-                    FilterChip(
-                        selected = snooze == m,
-                        onClick = { snooze = m },
-                        label = { Text("$m min") },
-                    )
-                }
-            }
-
         }
     }
 }
 
 @Composable
-private fun DateField(
+private fun SectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            content()
+        }
+    }
+}
+
+@Composable
+private fun DayDot(day: Int, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = if (selected) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.size(40.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Text(
+                DayOfWeek.of(day)
+                    .getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
+                    .first().uppercase(),
+                color = if (selected) MaterialTheme.colorScheme.onPrimary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DateRow(
     label: String,
     value: String,
     onClick: () -> Unit,
     onClear: (() -> Unit)?,
 ) {
-    Column {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(
             label,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Card(modifier = Modifier.clickable(onClick = onClick)) {
-                Text(
-                    value,
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        if (onClear != null) {
+            IconButton(onClick = onClear, modifier = Modifier.size(28.dp)) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Clear $label",
+                    modifier = Modifier.size(16.dp),
                 )
             }
-            if (onClear != null) {
-                IconButton(onClick = onClear, modifier = Modifier.size(28.dp)) {
-                    Icon(
-                        Icons.Filled.Close,
-                        contentDescription = "Clear $label",
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-            }
         }
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-    )
 }
 
 // ---------------------------------------------------------------------------
