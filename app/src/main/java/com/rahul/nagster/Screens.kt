@@ -133,6 +133,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.abs
+import kotlinx.coroutines.delay
 
 @Composable
 fun NagsterTheme(content: @Composable () -> Unit) {
@@ -439,7 +440,27 @@ private fun NagCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
-                        TextButton(onClick = onDone) { Text("Mark done") }
+                        // Two taps here too, so completing a nag is deliberate
+                        // wherever you do it. Disarms itself after a few seconds.
+                        var armed by remember(nag.id) { mutableStateOf(false) }
+                        LaunchedEffect(armed) {
+                            if (armed) {
+                                delay(4_000)
+                                armed = false
+                            }
+                        }
+                        TextButton(
+                            onClick = {
+                                if (armed) {
+                                    armed = false
+                                    onDone()
+                                } else {
+                                    armed = true
+                                }
+                            }
+                        ) {
+                            Text(if (armed) "Tap again to confirm" else "Mark done")
+                        }
                     }
                     else -> {
                         val next = nag.nextStartMillis()

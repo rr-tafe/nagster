@@ -8,7 +8,11 @@ import android.net.Uri
 
 object Scheduler {
     const val ACTION_FIRE = "com.rahul.nagster.action.FIRE"
+    const val ACTION_REVERT_CONFIRM = "com.rahul.nagster.action.REVERT_CONFIRM"
     const val EXTRA_NAG_ID = "nag_id"
+
+    /** How long the "confirm done?" step waits before reverting to the nag. */
+    private const val CONFIRM_TIMEOUT_MS = 15_000L
 
     private fun firePendingIntent(context: Context, nagId: Long): PendingIntent {
         val intent = Intent(context, AlarmReceiver::class.java)
@@ -19,6 +23,32 @@ object Scheduler {
             context, nagId.toInt(), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+    }
+
+    private fun revertPendingIntent(context: Context, nagId: Long): PendingIntent {
+        val intent = Intent(context, AlarmReceiver::class.java)
+            .setAction(ACTION_REVERT_CONFIRM)
+            .setData(Uri.parse("nagster://revert/$nagId"))
+            .putExtra(EXTRA_NAG_ID, nagId)
+        return PendingIntent.getBroadcast(
+            context, (nagId + 1_000_000L).toInt(), intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    /** Back out of the confirm step if the user walks away mid-decision. */
+    fun scheduleConfirmRevert(context: Context, nagId: Long) {
+        val am = context.getSystemService(AlarmManager::class.java)
+        val pi = revertPendingIntent(context, nagId)
+        am.cancel(pi)
+        am.setExactAndAllowWhileIdle(
+            AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + CONFIRM_TIMEOUT_MS, pi
+        )
+    }
+
+    fun cancelConfirmRevert(context: Context, nagId: Long) {
+        context.getSystemService(AlarmManager::class.java)
+            .cancel(revertPendingIntent(context, nagId))
     }
 
     /** Next moment this nag should fire, or null if it never will. */

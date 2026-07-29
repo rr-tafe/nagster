@@ -47,37 +47,68 @@ object Notifications {
             .forEach { nm.deleteNotificationChannel(it.id) }
     }
 
-    fun show(context: Context, nag: Nag) {
-        val contentIntent = PendingIntent.getActivity(
-            context, 0,
-            Intent(context, MainActivity::class.java),
+    private fun actionIntent(context: Context, nag: Nag, action: String): PendingIntent {
+        val intent = Intent(context, NagActionReceiver::class.java)
+            .setAction(action)
+            .setData(Uri.parse("nagster://nag/${nag.id}/$action"))
+            .putExtra(Scheduler.EXTRA_NAG_ID, nag.id)
+        return PendingIntent.getBroadcast(
+            context, nag.id.toInt(), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+    }
 
-        fun actionIntent(action: String): PendingIntent {
-            val intent = Intent(context, NagActionReceiver::class.java)
-                .setAction(action)
-                .setData(Uri.parse("nagster://nag/${nag.id}/$action"))
-                .putExtra(Scheduler.EXTRA_NAG_ID, nag.id)
-            return PendingIntent.getBroadcast(
-                context, nag.id.toInt(), intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-        }
-
-        val notification = NotificationCompat.Builder(
-            context, channelId(NagStore.data.value.soundUri)
-        )
+    private fun baseBuilder(context: Context, nag: Nag, alertAgain: Boolean) =
+        NotificationCompat.Builder(context, channelId(NagStore.data.value.soundUri))
             .setSmallIcon(R.drawable.ic_stat_nag)
             .setContentTitle(nag.text)
-            .setContentText("Nagging every ${nag.intervalMinutes} min until you confirm")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            .setContentIntent(contentIntent)
+            .setContentIntent(
+                PendingIntent.getActivity(
+                    context, 0,
+                    Intent(context, MainActivity::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
             .setAutoCancel(false)
-            .setOnlyAlertOnce(false)
-            .addAction(0, "DONE", actionIntent(NagActionReceiver.ACTION_DONE))
-            .addAction(0, "Snooze ${nag.snoozeMinutes}m", actionIntent(NagActionReceiver.ACTION_SNOOZE))
+            .setOnlyAlertOnce(!alertAgain)
+
+    /**
+     * The normal nagging notification. Snooze sits first so a careless tap in
+     * the usual spot merely delays the nag; Done is the deliberate second slot.
+     */
+    fun show(context: Context, nag: Nag, alertAgain: Boolean = true) {
+        val notification = baseBuilder(context, nag, alertAgain)
+            .setContentText("Nagging every ${formatMinutes(nag.intervalMinutes)} until you confirm")
+            .addAction(
+                0, "Snooze ${nag.snoozeMinutes}m",
+                actionIntent(context, nag, NagActionReceiver.ACTION_SNOOZE),
+            )
+            .addAction(0, "DONE", actionIntent(context, nag, NagActionReceiver.ACTION_DONE))
+            .build()
+
+        context.getSystemService(NotificationManager::class.java)
+            .notify(nag.id.toInt(), notification)
+    }
+
+    /**
+     * Second step of marking a nag done. "Yes, done" deliberately takes the
+     * first slot — the opposite position to the DONE that was just pressed —
+     * so a repeated tap in the same spot lands on "Not yet" instead of
+     * completing the nag by accident. Never re-alerts.
+     */
+    fun showConfirm(context: Context, nag: Nag) {
+        val notification = baseBuilder(context, nag, alertAgain = false)
+            .setContentText("Mark this done? This stops the nagging.")
+            .addAction(
+                0, "Yes, done",
+                actionIntent(context, nag, NagActionReceiver.ACTION_DONE_CONFIRM),
+            )
+            .addAction(
+                0, "Not yet",
+                actionIntent(context, nag, NagActionReceiver.ACTION_DONE_CANCEL),
+            )
             .build()
 
         context.getSystemService(NotificationManager::class.java)

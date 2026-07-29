@@ -71,6 +71,19 @@ class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val nagId = intent.getLongExtra(Scheduler.EXTRA_NAG_ID, -1)
         if (nagId == -1L) return
+
+        if (intent.action == Scheduler.ACTION_REVERT_CONFIRM) {
+            // The confirm step timed out — put the nag back the way it was.
+            async {
+                NagStore.init(context)
+                val nag = NagStore.nag(nagId) ?: return@async
+                if (nag.enabled && nag.activeSince != null) {
+                    Notifications.show(context, nag, alertAgain = false)
+                }
+            }
+            return
+        }
+
         async {
             NagStore.init(context)
             var nag = NagStore.nag(nagId) ?: return@async
@@ -102,6 +115,8 @@ class AlarmReceiver : BroadcastReceiver() {
 class NagActionReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_DONE = "com.rahul.nagster.action.DONE"
+        const val ACTION_DONE_CONFIRM = "com.rahul.nagster.action.DONE_CONFIRM"
+        const val ACTION_DONE_CANCEL = "com.rahul.nagster.action.DONE_CANCEL"
         const val ACTION_SNOOZE = "com.rahul.nagster.action.SNOOZE"
     }
 
@@ -113,7 +128,19 @@ class NagActionReceiver : BroadcastReceiver() {
             NagStore.init(context)
             val nag = NagStore.nag(nagId) ?: return@async
             when (action) {
-                ACTION_DONE -> finishSession(context, nag, logDone = true)
+                // First tap only arms the confirmation; nothing is completed yet.
+                ACTION_DONE -> {
+                    Notifications.showConfirm(context, nag)
+                    Scheduler.scheduleConfirmRevert(context, nagId)
+                }
+                ACTION_DONE_CONFIRM -> {
+                    Scheduler.cancelConfirmRevert(context, nagId)
+                    finishSession(context, nag, logDone = true)
+                }
+                ACTION_DONE_CANCEL -> {
+                    Scheduler.cancelConfirmRevert(context, nagId)
+                    Notifications.show(context, nag, alertAgain = false)
+                }
                 ACTION_SNOOZE -> {
                     val updated = NagStore.upsert(
                         nag.copy(snoozedUntil = System.currentTimeMillis() + nag.snoozeMinutes * 60_000L)
