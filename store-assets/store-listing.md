@@ -8,21 +8,41 @@ Reminders that keep nagging you until you confirm the task is actually done.
 
 ## Full description (4000 chars max)
 
-Ordinary reminders fire once and are forgotten. Nagster doesn't let you off that easily.
+Ordinary reminders fire once and then they're gone. If you were busy, driving, or half asleep, that's it — the notification slides away and the thing goes undone.
 
-Create a "nag" — a task, a start time, and a nag interval — and Nagster will notify you at the scheduled time, then keep re-notifying you at your chosen interval until you press Done. Perfect for the things that genuinely must happen: taking medication after a meal, moving laundry to the dryer, submitting a timesheet, locking the door.
+Nagster doesn't let go. Set a nag — what to do, when to start, how often to repeat — and it keeps notifying you at that interval until you explicitly confirm you've done it. Not dismissed. Not swiped away. Confirmed.
 
-FEATURES
+HOW IT WORKS
 
-• Persistent notifications — re-alert at your chosen interval (1–60 min) until confirmed
-• Done and Snooze buttons right on the notification — no need to open the app
-• Flexible schedules — every day, specific weekdays, or one-off nags
-• Give-up rules — nag forever, or stop after a set time window
-• History log — see exactly when you confirmed each task
-• Reliable — exact alarms fire through Doze and survive reboots
-• Private — no account, no ads, no analytics, no internet access; everything stays on your device
+When the time arrives, Nagster notifies you. If you don't confirm, it notifies you again after the interval. And again. It stops only when you tap Done, or when it reaches a give-up limit you chose.
 
-Nagster asks for notification and exact-alarm permissions — that's the entire product. Nothing else.
+Marking something done takes two taps on purpose. The first arms a confirmation, the second completes it, so a stray tap in your pocket can't clear a reminder you haven't acted on. Snooze sits in the easier-to-reach slot, which means a careless tap simply buys you time instead of losing the reminder.
+
+SCHEDULING
+
+• Routine — pick weekdays, with optional start and end dates for things like a two-week course of tablets
+• Pick Dates — choose specific dates on a calendar for irregular reminders
+• Just Once — a single reminder that switches itself off afterwards
+• Repeat intervals from 1 minute up to just under 24 hours
+• Give up after a set period, or never give up until you confirm
+• Snooze for 5, 10, 15 or 30 minutes without marking anything done
+
+EVERYTHING ELSE
+
+• A history log of every confirmation, so you can check whether you really did take yesterday's dose
+• Delete individual history entries, or clear the lot
+• Pick your own notification sound from inside the app
+• Light theme, dark theme, or follow your system setting
+• Exact alarms that fire through Doze and survive a reboot
+• Warns you if a nag is set up so that it could never actually fire
+
+PRIVACY
+
+Nagster has no internet permission at all — it cannot phone home, because it has no way to. No accounts, no ads, no analytics, no tracking. Everything you type stays in the app's private storage on your device, and uninstalling deletes it.
+
+The app asks for exactly two things: permission to post notifications, and permission to schedule exact alarms. That is the entire product.
+
+Good for medication after meals, moving the laundry, taking something out of the oven, submitting a timesheet, watering the plants, calling someone back, locking up — anything you have a track record of forgetting.
 
 ## Category
 Productivity
