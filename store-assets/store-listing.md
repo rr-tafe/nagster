@@ -41,4 +41,9 @@ emailrahulr@gmail.com
 ## Assets in this folder
 - `icon-512.png` — store icon (512×512)
 - `feature-1024x500.png` — feature graphic (1024×500)
-- Screenshots: capture 2–8 on the phone (power + volume-down); portrait PNG/JPG, any Pixel resolution is accepted
+- `screenshots/` — 5 phone screenshots (960×2142 PNG), captured on a Pixel 9 Pro running v1.6:
+  1. `01-nag-list.png` — nag list, one nag actively nagging
+  2. `02-notification.png` — heads-up notification with DONE / Snooze
+  3. `03-edit-schedule.png` — Edit Nag: text + Schedule card
+  4. `04-edit-persistence.png` — Persistence Rules carousels
+  5. `05-history.png` — confirmation history
