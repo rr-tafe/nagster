@@ -6,12 +6,18 @@
 
 package com.rahul.nagster
 
+import android.app.Activity
 import android.app.AlarmManager
 import android.content.Intent
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import android.view.HapticFeedbackConstants
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -36,6 +42,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -53,6 +60,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -87,6 +95,7 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -95,6 +104,13 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -138,7 +154,24 @@ fun NagsterTheme(content: @Composable () -> Unit) {
 @Composable
 fun NagsterApp(startInQuickAdd: Boolean, vm: NagViewModel = viewModel()) {
     val nav = rememberNavController()
-    NavHost(nav, startDestination = "list") {
+    // A short push/pop slide instead of the default cross-fade.
+    val slide = tween<androidx.compose.ui.unit.IntOffset>(170)
+    NavHost(
+        nav,
+        startDestination = "list",
+        enterTransition = {
+            slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Start, slide)
+        },
+        exitTransition = {
+            slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Start, slide)
+        },
+        popEnterTransition = {
+            slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.End, slide)
+        },
+        popExitTransition = {
+            slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.End, slide)
+        },
+    ) {
         composable("list") {
             ListScreen(
                 vm = vm,
@@ -201,11 +234,41 @@ fun ListScreen(
             .isIgnoringBatteryOptimizations(context.packageName)
     }
 
+    val soundPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val picked = result.data
+                ?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+            vm.setSoundUri(picked?.toString())
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Nagster") },
                 actions = {
+                    IconButton(onClick = {
+                        soundPicker.launch(
+                            Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                                putExtra(
+                                    RingtoneManager.EXTRA_RINGTONE_TYPE,
+                                    RingtoneManager.TYPE_NOTIFICATION,
+                                )
+                                putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Nag sound")
+                                putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                                putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                                putExtra(
+                                    RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,
+                                    data.soundUri?.let(Uri::parse)
+                                        ?: Settings.System.DEFAULT_NOTIFICATION_URI,
+                                )
+                            }
+                        )
+                    }) {
+                        Icon(Icons.Filled.MusicNote, contentDescription = "Nag sound")
+                    }
                     IconButton(onClick = {
                         vm.setThemeMode(
                             when (data.themeMode) {
@@ -503,6 +566,41 @@ private fun WheelUnit(text: String) {
 // Preset carousel
 // ---------------------------------------------------------------------------
 
+/**
+ * Softens whichever edges still have content beyond them, so a row of pills
+ * reads as scrollable rather than as a complete set.
+ */
+private fun Modifier.scrollHints(state: LazyListState, fadeWidth: Float): Modifier =
+    this
+        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            if (state.canScrollBackward) {
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(Color.Transparent, Color.Black),
+                        startX = 0f,
+                        endX = fadeWidth,
+                    ),
+                    topLeft = Offset.Zero,
+                    size = Size(fadeWidth, size.height),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
+            if (state.canScrollForward) {
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(Color.Black, Color.Transparent),
+                        startX = size.width - fadeWidth,
+                        endX = size.width,
+                    ),
+                    topLeft = Offset(size.width - fadeWidth, 0f),
+                    size = Size(fadeWidth, size.height),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
+        }
+
 @Composable
 private fun PresetCarousel(
     presets: List<Pair<Int, String>>,
@@ -510,19 +608,38 @@ private fun PresetCarousel(
     onSelect: (Int) -> Unit,
     onCustom: () -> Unit,
 ) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        items(presets) { (value, label) ->
-            FilterChip(
-                selected = selected == value,
-                onClick = { onSelect(value) },
-                label = { Text(label) },
-            )
+    val state = rememberLazyListState()
+    val fadeWidth = with(LocalDensity.current) { 28.dp.toPx() }
+    val moreToTheRight by remember { derivedStateOf { state.canScrollForward } }
+
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        LazyRow(
+            state = state,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .scrollHints(state, fadeWidth),
+        ) {
+            items(presets) { (value, label) ->
+                FilterChip(
+                    selected = selected == value,
+                    onClick = { onSelect(value) },
+                    label = { Text(label) },
+                )
+            }
+            item {
+                FilterChip(
+                    selected = selected == null,
+                    onClick = onCustom,
+                    label = { Text("Custom…") },
+                )
+            }
         }
-        item {
-            FilterChip(
-                selected = selected == null,
-                onClick = onCustom,
-                label = { Text("Custom…") },
+        if (moreToTheRight) {
+            Text(
+                "swipe for more ›",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

@@ -54,6 +54,13 @@ object NagStore {
         }
     }
 
+    fun setSoundUri(soundUri: String?) {
+        synchronized(lock) {
+            _data.value = _data.value.copy(soundUri = soundUri)
+            persist()
+        }
+    }
+
     fun setThemeMode(themeMode: String) {
         synchronized(lock) {
             _data.value = _data.value.copy(themeMode = themeMode)

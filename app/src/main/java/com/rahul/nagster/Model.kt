@@ -191,4 +191,6 @@ data class StoreData(
     val events: List<NagEvent> = emptyList(),
     val nextId: Long = 1,
     val themeMode: String = THEME_SYSTEM,
+    /** Ringtone URI for nag notifications; null = system default. */
+    val soundUri: String? = null,
 )

@@ -5,21 +5,46 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
 import android.net.Uri
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 
 object Notifications {
-    const val CHANNEL_ID = "nags"
+    private const val CHANNEL_PREFIX = "nags_"
+    private const val LEGACY_CHANNEL_ID = "nags"
+
+    /**
+     * Android freezes a channel's sound once it is created, so changing the
+     * sound means publishing a *new* channel. The id is derived from the chosen
+     * ringtone; stale channels are deleted so the system list stays tidy.
+     */
+    private fun channelId(soundUri: String?): String =
+        CHANNEL_PREFIX + (soundUri?.hashCode()?.toUInt()?.toString(16) ?: "default")
 
     fun ensureChannel(context: Context) {
+        val soundUri = NagStore.data.value.soundUri
+        val id = channelId(soundUri)
+        val nm = context.getSystemService(NotificationManager::class.java)
+
         val channel = NotificationChannel(
-            CHANNEL_ID, "Nags", NotificationManager.IMPORTANCE_HIGH
+            id, "Nags", NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "Persistent nagging reminders"
             enableVibration(true)
+            setSound(
+                soundUri?.let(Uri::parse) ?: Settings.System.DEFAULT_NOTIFICATION_URI,
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            )
         }
-        context.getSystemService(NotificationManager::class.java)
-            .createNotificationChannel(channel)
+        nm.createNotificationChannel(channel)
+
+        nm.notificationChannels
+            .filter { it.id != id && (it.id == LEGACY_CHANNEL_ID || it.id.startsWith(CHANNEL_PREFIX)) }
+            .forEach { nm.deleteNotificationChannel(it.id) }
     }
 
     fun show(context: Context, nag: Nag) {
@@ -40,7 +65,9 @@ object Notifications {
             )
         }
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(
+            context, channelId(NagStore.data.value.soundUri)
+        )
             .setSmallIcon(R.drawable.ic_stat_nag)
             .setContentTitle(nag.text)
             .setContentText("Nagging every ${nag.intervalMinutes} min until you confirm")

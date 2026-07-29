@@ -52,6 +52,13 @@ class NagViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun setSoundUri(soundUri: String?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            NagStore.setSoundUri(soundUri)
+            Notifications.ensureChannel(ctx)
+        }
+    }
+
     fun deleteEvents(timestamps: Set<Long>) {
         viewModelScope.launch(Dispatchers.IO) {
             NagStore.deleteEvents(timestamps)
