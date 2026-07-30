@@ -128,6 +128,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.emoji2.emojipicker.EmojiPickerView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1243,34 +1245,51 @@ private fun EmojiCircle(emoji: String, colorArgb: Int?, onClick: () -> Unit) {
     }
 }
 
-/** The full AndroidX emoji catalogue, since the IME can't be forced into emoji mode. */
+/**
+ * The full AndroidX emoji catalogue, since the IME can't be forced into emoji mode.
+ *
+ * Deliberately a Dialog rather than a ModalBottomSheet: the sheet claims vertical
+ * drags for its own drag-to-dismiss, which starves the picker's internal
+ * RecyclerView and leaves the grid unscrollable while tab taps still work.
+ */
 @Composable
 private fun EmojiPickerSheet(
     onPicked: (String) -> Unit,
     onClear: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            tonalElevation = 6.dp,
+            modifier = Modifier.fillMaxWidth(0.94f),
         ) {
-            Text(
-                "Choose an emoji",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onClear) { Text("Remove") }
-        }
-        AndroidView(
-            factory = { ctx ->
-                EmojiPickerView(ctx).apply {
-                    emojiGridColumns = 9
-                    setOnEmojiPickedListener { picked -> onPicked(picked.emoji) }
+            Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Choose an emoji",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onClear) { Text("Remove") }
                 }
-            },
-            modifier = Modifier.fillMaxWidth().height(360.dp),
-        )
+                AndroidView(
+                    factory = { ctx ->
+                        EmojiPickerView(ctx).apply {
+                            emojiGridColumns = 9
+                            setOnEmojiPickedListener { picked -> onPicked(picked.emoji) }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(400.dp),
+                )
+            }
+        }
     }
 }
 

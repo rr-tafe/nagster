@@ -21,8 +21,8 @@ android {
         applicationId = "com.rahul.nagster"
         minSdk = 34
         targetSdk = 36
-        versionCode = 13
-        versionName = "1.12"
+        versionCode = 14
+        versionName = "1.13"
     }
 
     signingConfigs {
