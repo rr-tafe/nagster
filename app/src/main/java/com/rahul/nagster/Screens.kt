@@ -18,6 +18,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -118,6 +119,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -436,7 +438,11 @@ private fun NagCard(
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (nag.emoji.isNotEmpty() || nag.colorArgb != null) {
+                NagBadge(emoji = nag.emoji, colorArgb = nag.colorArgb, size = 44.dp)
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     nag.text,
@@ -699,6 +705,8 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
     val dateFmt = remember { DateTimeFormatter.ofPattern("EEE d MMM") }
 
     var text by remember { mutableStateOf(existing?.text ?: "") }
+    var emoji by remember { mutableStateOf(existing?.emoji ?: "") }
+    var colorArgb by remember { mutableStateOf(existing?.colorArgb) }
     var hour by remember { mutableStateOf(existing?.hour ?: 9) }
     var minute by remember { mutableStateOf(existing?.minute ?: 0) }
     var mode by remember { mutableStateOf(existing?.effectiveMode ?: MODE_ROUTINE) }
@@ -740,6 +748,8 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
 
     fun buildNag(): Nag = (existing ?: Nag()).copy(
         text = text.trim(),
+        emoji = emoji,
+        colorArgb = colorArgb,
         hour = hour,
         minute = minute,
         mode = mode,
@@ -895,12 +905,63 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             SectionCard("Nag about what?") {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    placeholder = { Text("e.g. Take medication after dinner") },
-                    modifier = Modifier.fillMaxWidth(),
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = emoji,
+                        onValueChange = { emoji = firstGrapheme(it) },
+                        placeholder = { Text("🙂") },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.width(88.dp),
+                    )
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        placeholder = { Text("e.g. Take medication after dinner") },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Text(
+                    "Optional: tap the small box and switch to your emoji keyboard.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+
+                Text("Colour (optional)", style = MaterialTheme.typography.bodyMedium)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ColorSwatch(
+                        color = null,
+                        selected = colorArgb == null,
+                        onClick = { colorArgb = null },
+                    )
+                    NAG_COLORS.forEach { swatch ->
+                        ColorSwatch(
+                            color = swatch,
+                            selected = colorArgb == swatch,
+                            onClick = { colorArgb = swatch },
+                        )
+                    }
+                }
+
+                if (emoji.isNotEmpty() || colorArgb != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        NagBadge(emoji = emoji, colorArgb = colorArgb, size = 40.dp)
+                        Text(
+                            "Shown on the notification and in your list",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
 
             SectionCard("Schedule") {
@@ -1081,6 +1142,48 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
             }
 
             Spacer(Modifier.height(56.dp))
+        }
+    }
+}
+
+/** The nag's emoji on a coloured circle — the same badge the notification draws. */
+@Composable
+private fun NagBadge(emoji: String, colorArgb: Int?, size: androidx.compose.ui.unit.Dp) {
+    Surface(
+        shape = CircleShape,
+        color = Color(colorArgb ?: NAG_BADGE_NEUTRAL),
+        modifier = Modifier.size(size),
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            if (emoji.isNotEmpty()) {
+                Text(emoji, fontSize = (size.value * 0.5f).sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColorSwatch(color: Int?, selected: Boolean, onClick: () -> Unit) {
+    val ring = if (selected) 3.dp else 0.dp
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = color?.let { Color(it) } ?: MaterialTheme.colorScheme.surfaceVariant,
+        border = if (selected) {
+            BorderStroke(ring, MaterialTheme.colorScheme.onSurface)
+        } else null,
+        modifier = Modifier.size(40.dp),
+    ) {
+        // The "no colour" swatch is the only one that needs a glyph.
+        if (color == null) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "No colour",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

@@ -17,6 +17,31 @@ const val THEME_SYSTEM = "SYSTEM"
 const val THEME_LIGHT = "LIGHT"
 const val THEME_DARK = "DARK"
 
+/**
+ * Swatches a nag can be tagged with. Mid-tone and saturated so the badge reads
+ * clearly against both light and dark shades, and so full-colour emoji drawn on
+ * top stay legible.
+ */
+val NAG_COLORS: List<Int> = listOf(
+    0xFFE53935.toInt(), 0xFFD81B60.toInt(), 0xFF8E24AA.toInt(), 0xFF5E35B1.toInt(),
+    0xFF3949AB.toInt(), 0xFF1E88E5.toInt(), 0xFF039BE5.toInt(), 0xFF00ACC1.toInt(),
+    0xFF00897B.toInt(), 0xFF43A047.toInt(), 0xFF7CB342.toInt(), 0xFFC0CA33.toInt(),
+    0xFFFDD835.toInt(), 0xFFFFB300.toInt(), 0xFFFB8C00.toInt(), 0xFFF4511E.toInt(),
+    0xFF6D4C41.toInt(), 0xFF757575.toInt(), 0xFF546E7A.toInt(), 0xFF37474F.toInt(),
+)
+
+/** Fallback badge background when a nag has an emoji but no colour. */
+const val NAG_BADGE_NEUTRAL = 0xFF757575.toInt()
+
+/** First grapheme cluster, so multi-codepoint emoji (ZWJ, skin tones) survive. */
+fun firstGrapheme(text: String): String {
+    if (text.isEmpty()) return ""
+    val iterator = java.text.BreakIterator.getCharacterInstance()
+    iterator.setText(text)
+    val end = iterator.next()
+    return if (end == java.text.BreakIterator.DONE) text else text.substring(0, end)
+}
+
 fun formatMinutes(totalMinutes: Int): String {
     val d = totalMinutes / (24 * 60)
     val h = (totalMinutes % (24 * 60)) / 60
@@ -32,6 +57,10 @@ fun formatMinutes(totalMinutes: Int): String {
 data class Nag(
     val id: Long = 0,
     val text: String = "",
+    /** Single emoji shown on the nag's badge; blank = no badge glyph. */
+    val emoji: String = "",
+    /** ARGB colour for the badge and notification accent; null = uncoloured. */
+    val colorArgb: Int? = null,
     val hour: Int = 9,
     val minute: Int = 0,
     /** ISO day-of-week values (1 = Monday .. 7 = Sunday); used in MODE_ROUTINE. */

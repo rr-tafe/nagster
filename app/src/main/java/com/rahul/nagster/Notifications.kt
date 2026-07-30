@@ -5,6 +5,9 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.media.AudioAttributes
 import android.net.Uri
 import android.provider.Settings
@@ -58,10 +61,46 @@ object Notifications {
         )
     }
 
+    /**
+     * The nag's emoji drawn on a filled circle in its colour, used as the
+     * notification's large icon. Android reserves the small (status bar) icon
+     * for a monochrome silhouette, so this badge is where colour and emoji can
+     * actually show up prominently.
+     */
+    private fun badgeBitmap(nag: Nag): Bitmap {
+        val size = 192
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val half = size / 2f
+
+        canvas.drawCircle(half, half, half, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = nag.colorArgb ?: NAG_BADGE_NEUTRAL
+        })
+
+        if (nag.emoji.isNotEmpty()) {
+            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                textSize = size * 0.55f
+                textAlign = Paint.Align.CENTER
+            }
+            val metrics = textPaint.fontMetrics
+            canvas.drawText(
+                nag.emoji, half, half - (metrics.ascent + metrics.descent) / 2f, textPaint
+            )
+        }
+        return bitmap
+    }
+
     private fun baseBuilder(context: Context, nag: Nag, alertAgain: Boolean) =
         NotificationCompat.Builder(context, channelId(NagStore.data.value.soundUri))
             .setSmallIcon(R.drawable.ic_stat_nag)
             .setContentTitle(nag.text)
+            .apply {
+                // Both are optional; an untagged nag looks exactly as it did before.
+                if (nag.emoji.isNotEmpty() || nag.colorArgb != null) {
+                    setLargeIcon(badgeBitmap(nag))
+                }
+                nag.colorArgb?.let { setColor(it) }
+            }
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setContentIntent(
