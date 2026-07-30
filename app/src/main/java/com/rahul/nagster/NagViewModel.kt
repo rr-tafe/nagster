@@ -46,6 +46,12 @@ class NagViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun setUse24Hour(use24Hour: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            NagStore.setUse24Hour(use24Hour)
+        }
+    }
+
     fun setThemeMode(themeMode: String) {
         viewModelScope.launch(Dispatchers.IO) {
             NagStore.setThemeMode(themeMode)

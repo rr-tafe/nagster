@@ -61,6 +61,13 @@ object NagStore {
         }
     }
 
+    fun setUse24Hour(use24Hour: Boolean) {
+        synchronized(lock) {
+            _data.value = _data.value.copy(use24Hour = use24Hour)
+            persist()
+        }
+    }
+
     fun setThemeMode(themeMode: String) {
         synchronized(lock) {
             _data.value = _data.value.copy(themeMode = themeMode)

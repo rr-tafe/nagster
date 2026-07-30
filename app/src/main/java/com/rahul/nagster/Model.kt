@@ -33,6 +33,16 @@ val NAG_COLORS: List<Int> = listOf(
 /** Fallback badge background when a nag has an emoji but no colour. */
 const val NAG_BADGE_NEUTRAL = 0xFF757575.toInt()
 
+/** Clock time in the user's chosen format. */
+fun formatClock(hour: Int, minute: Int, use24Hour: Boolean): String =
+    if (use24Hour) {
+        "%02d:%02d".format(hour, minute)
+    } else {
+        java.time.LocalTime.of(hour, minute)
+            .format(DateTimeFormatter.ofPattern("h:mm a"))
+            .uppercase()
+    }
+
 /** First grapheme cluster, so multi-codepoint emoji (ZWJ, skin tones) survive. */
 fun firstGrapheme(text: String): String {
     if (text.isEmpty()) return ""
@@ -167,8 +177,8 @@ data class Nag(
     fun willNeverFire(now: Long = System.currentTimeMillis()): Boolean =
         nextStartMillis(now) == null && liveMissedStart(now) == null
 
-    fun scheduleSummary(): String {
-        val time = "%02d:%02d".format(hour, minute)
+    fun scheduleSummary(use24Hour: Boolean): String {
+        val time = formatClock(hour, minute, use24Hour)
         val df = DateTimeFormatter.ofPattern("d MMM")
         val parts = mutableListOf<String>()
         when (effectiveMode) {
@@ -194,7 +204,9 @@ data class Nag(
                     ?.takeIf { it.isAfter(LocalDate.now()) }
                     ?.let { parts += "from ${it.format(df)}" }
                 endDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let {
-                    val t = if (endHour != null) " %02d:%02d".format(endHour, endMinute ?: 0) else ""
+                    val t = if (endHour != null) {
+                        " " + formatClock(endHour, endMinute ?: 0, use24Hour)
+                    } else ""
                     parts += "until ${it.format(df)}$t"
                 }
             }
@@ -218,6 +230,8 @@ data class StoreData(
     val events: List<NagEvent> = emptyList(),
     val nextId: Long = 1,
     val themeMode: String = THEME_SYSTEM,
+    /** null = follow the device's clock setting. */
+    val use24Hour: Boolean? = null,
     /** Ringtone URI for nag notifications; null = system default. */
     val soundUri: String? = null,
 )

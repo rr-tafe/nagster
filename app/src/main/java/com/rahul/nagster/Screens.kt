@@ -217,17 +217,20 @@ fun NagsterApp(startInQuickAdd: Boolean, vm: NagViewModel = viewModel()) {
     }
 }
 
-private fun formatMillis(millis: Long): String {
-    val zone = ZoneId.systemDefault()
-    val zdt = Instant.ofEpochMilli(millis).atZone(zone)
-    val pattern = if (zdt.toLocalDate() < LocalDate.now().plusDays(7)) "EEE HH:mm" else "d MMM HH:mm"
-    return zdt.format(DateTimeFormatter.ofPattern(pattern))
+private fun formatMillis(millis: Long, use24Hour: Boolean): String {
+    val zdt = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
+    val dayPattern = if (zdt.toLocalDate() < LocalDate.now().plusDays(7)) "EEE" else "d MMM"
+    val day = zdt.format(DateTimeFormatter.ofPattern(dayPattern, Locale.getDefault()))
+    // Reuse formatClock so AM/PM casing matches the rest of the app.
+    return "$day ${formatClock(zdt.hour, zdt.minute, use24Hour)}"
 }
 
-private fun formatTime12(hour: Int, minute: Int): String =
-    LocalTime.of(hour, minute)
-        .format(DateTimeFormatter.ofPattern("hh:mm a"))
-        .uppercase()
+/** The stored preference, falling back to how the device itself shows the clock. */
+@Composable
+private fun rememberUse24Hour(stored: Boolean?): Boolean {
+    val context = LocalContext.current
+    return stored ?: android.text.format.DateFormat.is24HourFormat(context)
+}
 
 // ---------------------------------------------------------------------------
 // List screen
@@ -242,6 +245,7 @@ fun ListScreen(
 ) {
     val data by vm.data.collectAsState()
     val context = LocalContext.current
+    val use24Hour = rememberUse24Hour(data.use24Hour)
 
     fun exactAlarmsAllowed() =
         context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
@@ -384,6 +388,7 @@ fun ListScreen(
             items(data.nags, key = { it.id }) { nag ->
                 NagCard(
                     nag = nag,
+                    use24Hour = use24Hour,
                     onClick = { onEdit(nag.id) },
                     onToggle = { vm.setEnabled(nag, it) },
                     onDone = { vm.markDone(nag) },
@@ -441,6 +446,7 @@ private fun WarningCard(text: String, buttonText: String, onClick: () -> Unit) {
 @Composable
 private fun NagCard(
     nag: Nag,
+    use24Hour: Boolean,
     onClick: () -> Unit,
     onToggle: (Boolean) -> Unit,
     onDone: () -> Unit,
@@ -462,7 +468,7 @@ private fun NagCard(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    nag.scheduleSummary(),
+                    nag.scheduleSummary(use24Hour),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -475,7 +481,7 @@ private fun NagCard(
                     )
                     nag.activeSince != null -> {
                         Text(
-                            "🔔 Nagging now (since ${formatMillis(nag.activeSince)})",
+                            "🔔 Nagging now (since ${formatMillis(nag.activeSince, use24Hour)})",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -505,7 +511,7 @@ private fun NagCard(
                         val next = nag.nextStartMillis()
                         if (next != null || !nag.willNeverFire()) {
                             Text(
-                                if (next != null) "Next: ${formatMillis(next)}" else "Due now",
+                                if (next != null) "Next: ${formatMillis(next, use24Hour)}" else "Due now",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -714,6 +720,7 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
     val data by vm.data.collectAsState()
     val existing = remember(nagId) { data.nags.find { it.id == nagId } }
     val dateFmt = remember { DateTimeFormatter.ofPattern("EEE d MMM") }
+    val use24Hour = rememberUse24Hour(data.use24Hour)
 
     var text by remember { mutableStateOf(existing?.text ?: "") }
     var emoji by remember { mutableStateOf(existing?.emoji ?: "") }
@@ -822,7 +829,7 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
         val state = rememberTimePickerState(
             initialHour = if (isEnd) endHour ?: 23 else hour,
             initialMinute = if (isEnd) endMinute ?: 59 else minute,
-            is24Hour = false,
+            is24Hour = use24Hour,
         )
         AlertDialog(
             onDismissRequest = { timePickerTarget = null },
@@ -1012,7 +1019,7 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                             dateValue = startDate?.let {
                                 runCatching { LocalDate.parse(it).format(dateFmt) }.getOrNull()
                             } ?: "Today",
-                            timeValue = formatTime12(hour, minute),
+                            timeValue = formatClock(hour, minute, use24Hour),
                             onDateClick = { datePickerTarget = "START" },
                             onTimeClick = { timePickerTarget = "MAIN" },
                             onClear = if (startDate != null) ({ startDate = null }) else null,
@@ -1023,7 +1030,7 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                                 runCatching { LocalDate.parse(it).format(dateFmt) }.getOrNull()
                             } ?: "Never",
                             timeValue = if (endDate != null) {
-                                formatTime12(endHour ?: 23, endMinute ?: 59)
+                                formatClock(endHour ?: 23, endMinute ?: 59, use24Hour)
                             } else null,
                             onDateClick = { datePickerTarget = "END" },
                             onTimeClick = { timePickerTarget = "END" },
@@ -1070,14 +1077,14 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                         }
                         TimeRow(
                             label = "At",
-                            timeValue = formatTime12(hour, minute),
+                            timeValue = formatClock(hour, minute, use24Hour),
                             onClick = { timePickerTarget = "MAIN" },
                         )
                     }
                     else -> {
                         TimeRow(
                             label = "At",
-                            timeValue = formatTime12(hour, minute),
+                            timeValue = formatClock(hour, minute, use24Hour),
                             onClick = { timePickerTarget = "MAIN" },
                         )
                         Text(
@@ -1085,6 +1092,26 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Time format",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    SingleChoiceSegmentedButtonRow {
+                        listOf(false to "AM/PM", true to "24h").forEachIndexed { i, (is24, label) ->
+                            SegmentedButton(
+                                selected = use24Hour == is24,
+                                onClick = { vm.setUse24Hour(is24) },
+                                shape = SegmentedButtonDefaults.itemShape(index = i, count = 2),
+                            ) { Text(label) }
+                        }
                     }
                 }
             }
@@ -1445,9 +1472,8 @@ private fun TimeRow(label: String, timeValue: String, onClick: () -> Unit) {
 fun HistoryScreen(vm: NagViewModel, onClose: () -> Unit) {
     val data by vm.data.collectAsState()
     val events = remember(data) { data.events.sortedByDescending { it.timestamp } }
-    val formatter = remember {
-        DateTimeFormatter.ofPattern("EEE d MMM · HH:mm", Locale.getDefault())
-    }
+    val use24Hour = rememberUse24Hour(data.use24Hour)
+    val dayFormatter = remember { DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()) }
 
     var selecting by remember { mutableStateOf(false) }
     var selection by remember { mutableStateOf(setOf<Long>()) }
@@ -1567,7 +1593,10 @@ fun HistoryScreen(vm: NagViewModel, onClose: () -> Unit) {
                             Text(
                                 Instant.ofEpochMilli(event.timestamp)
                                     .atZone(ZoneId.systemDefault())
-                                    .format(formatter),
+                                    .let {
+                                        "${it.format(dayFormatter)} · " +
+                                            formatClock(it.hour, it.minute, use24Hour)
+                                    },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
