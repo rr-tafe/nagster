@@ -704,7 +704,6 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
     var giveUpH by remember { mutableStateOf((existingGiveUp % (24 * 60)) / 60) }
     var giveUpM by remember { mutableStateOf(if (existingGiveUp == 0) 0 else existingGiveUp % 60) }
 
-    var snooze by remember { mutableStateOf(existing?.snoozeMinutes ?: 10) }
     var timePickerTarget by remember { mutableStateOf<String?>(null) }
     var datePickerTarget by remember { mutableStateOf<String?>(null) }
 
@@ -730,7 +729,6 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
         endMinute = if (endDate != null) endMinute else null,
         intervalMinutes = intervalTotal,
         giveUpAfterMinutes = effectiveGiveUp,
-        snoozeMinutes = snooze,
         enabled = true,
     )
 
@@ -1048,17 +1046,6 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                         WheelUnit("h")
                         NumberWheel(0..59, giveUpM, { giveUpM = it })
                         WheelUnit("min")
-                    }
-                }
-
-                Text("Snooze length", style = MaterialTheme.typography.bodyMedium)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(5, 10, 15, 30).forEach { m ->
-                        FilterChip(
-                            selected = snooze == m,
-                            onClick = { snooze = m },
-                            label = { Text("$m min") },
-                        )
                     }
                 }
 

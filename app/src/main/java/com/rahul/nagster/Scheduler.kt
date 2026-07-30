@@ -54,10 +54,7 @@ object Scheduler {
     /** Next moment this nag should fire, or null if it never will. */
     fun nextTrigger(nag: Nag, now: Long = System.currentTimeMillis()): Long? {
         if (!nag.enabled) return null
-        if (nag.activeSince != null) {
-            val snoozed = nag.snoozedUntil ?: 0
-            return if (snoozed > now) snoozed else now + nag.intervalMinutes * 60_000L
-        }
+        if (nag.activeSince != null) return now + nag.intervalMinutes * 60_000L
         return nag.nextStartMillis(now)
     }
 
@@ -95,7 +92,7 @@ object Scheduler {
             val trigger = if (afterReboot && nag.enabled && nag.activeSince != null) {
                 // Resume an in-progress nagging session shortly after boot
                 // instead of waiting a full interval.
-                maxOf(nag.snoozedUntil ?: 0, now + 60_000)
+                now + 60_000
             } else {
                 nextTrigger(nag, now)
             }

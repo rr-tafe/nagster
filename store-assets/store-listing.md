@@ -16,7 +16,7 @@ HOW IT WORKS
 
 When the time arrives, Nagster notifies you. If you don't confirm, it notifies you again after the interval. And again. It stops only when you tap Done, or when it reaches a give-up limit you chose.
 
-Marking something done takes two taps on purpose. The first arms a confirmation, the second completes it, so a stray tap in your pocket can't clear a reminder you haven't acted on. Snooze sits in the easier-to-reach slot, which means a careless tap simply buys you time instead of losing the reminder.
+Marking something done takes two taps on purpose. The first arms a confirmation, the second completes it, so a stray tap in your pocket can't clear a reminder you haven't acted on. And the confirmation puts "Not yet" where the first button was, so tapping twice in the same spot backs out rather than completing it.
 
 SCHEDULING
 
@@ -25,7 +25,6 @@ SCHEDULING
 • Just Once — a single reminder that switches itself off afterwards
 • Repeat intervals from 1 minute up to just under 24 hours
 • Give up after a set period, or never give up until you confirm
-• Snooze for 5, 10, 15 or 30 minutes without marking anything done
 
 EVERYTHING ELSE
 
@@ -63,7 +62,8 @@ emailrahulr@gmail.com
 - `feature-1024x500.png` — feature graphic (1024×500)
 - `screenshots/` — 5 phone screenshots (960×2142 PNG), captured on a Pixel 9 Pro running v1.6:
   1. `01-nag-list.png` — nag list, one nag actively nagging
-  2. `02-notification.png` — heads-up notification with DONE / Snooze
+  2. `02-notification.png` — heads-up notification with DONE
+     (STALE as of v1.8 — still shows the removed Snooze action; recapture)
   3. `03-edit-schedule.png` — Edit Nag: text + Schedule card
   4. `04-edit-persistence.png` — Persistence Rules carousels
   5. `05-history.png` — confirmation history

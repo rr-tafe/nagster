@@ -59,7 +59,6 @@ fun finishSession(context: Context, nag: Nag, logDone: Boolean) {
     }
     val finished = nag.copy(
         activeSince = null,
-        snoozedUntil = null,
         enabled = if (expired) false else nag.enabled,
     )
     NagStore.upsert(finished)
@@ -91,12 +90,7 @@ class AlarmReceiver : BroadcastReceiver() {
             val now = System.currentTimeMillis()
 
             if (nag.activeSince == null) {
-                nag = NagStore.upsert(nag.copy(activeSince = now, snoozedUntil = null))
-            }
-
-            if ((nag.snoozedUntil ?: 0) > now) {
-                Scheduler.reschedule(context, nag)
-                return@async
+                nag = NagStore.upsert(nag.copy(activeSince = now))
             }
 
             if (nag.giveUpAfterMinutes > 0 &&
@@ -117,7 +111,6 @@ class NagActionReceiver : BroadcastReceiver() {
         const val ACTION_DONE = "com.rahul.nagster.action.DONE"
         const val ACTION_DONE_CONFIRM = "com.rahul.nagster.action.DONE_CONFIRM"
         const val ACTION_DONE_CANCEL = "com.rahul.nagster.action.DONE_CANCEL"
-        const val ACTION_SNOOZE = "com.rahul.nagster.action.SNOOZE"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -140,13 +133,6 @@ class NagActionReceiver : BroadcastReceiver() {
                 ACTION_DONE_CANCEL -> {
                     Scheduler.cancelConfirmRevert(context, nagId)
                     Notifications.show(context, nag, alertAgain = false)
-                }
-                ACTION_SNOOZE -> {
-                    val updated = NagStore.upsert(
-                        nag.copy(snoozedUntil = System.currentTimeMillis() + nag.snoozeMinutes * 60_000L)
-                    )
-                    Notifications.cancel(context, nag.id)
-                    Scheduler.reschedule(context, updated)
                 }
             }
         }

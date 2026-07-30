@@ -39,11 +39,9 @@ data class Nag(
     val intervalMinutes: Int = 10,
     /** 0 = never give up. */
     val giveUpAfterMinutes: Int = 0,
-    val snoozeMinutes: Int = 10,
     val enabled: Boolean = true,
     /** Epoch millis when the current nagging session started; null = idle. */
     val activeSince: Long? = null,
-    val snoozedUntil: Long? = null,
     /** MODE_ROUTINE, MODE_DATES or MODE_ONCE. Blank (data written by v1.0) = derived. */
     val mode: String = "",
     /** ISO local dates ("2026-08-03") this nag fires on; used in MODE_DATES. */

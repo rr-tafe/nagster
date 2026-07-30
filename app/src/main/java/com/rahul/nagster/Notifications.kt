@@ -74,17 +74,10 @@ object Notifications {
             .setAutoCancel(false)
             .setOnlyAlertOnce(!alertAgain)
 
-    /**
-     * The normal nagging notification. Snooze sits first so a careless tap in
-     * the usual spot merely delays the nag; Done is the deliberate second slot.
-     */
+    /** The normal nagging notification. DONE only arms the confirmation step. */
     fun show(context: Context, nag: Nag, alertAgain: Boolean = true) {
         val notification = baseBuilder(context, nag, alertAgain)
             .setContentText("Nagging every ${formatMinutes(nag.intervalMinutes)} until you confirm")
-            .addAction(
-                0, "Snooze ${nag.snoozeMinutes}m",
-                actionIntent(context, nag, NagActionReceiver.ACTION_SNOOZE),
-            )
             .addAction(0, "DONE", actionIntent(context, nag, NagActionReceiver.ACTION_DONE))
             .build()
 
@@ -93,21 +86,20 @@ object Notifications {
     }
 
     /**
-     * Second step of marking a nag done. "Yes, done" deliberately takes the
-     * first slot — the opposite position to the DONE that was just pressed —
-     * so a repeated tap in the same spot lands on "Not yet" instead of
-     * completing the nag by accident. Never re-alerts.
+     * Second step of marking a nag done. "Not yet" deliberately takes the first
+     * slot — the same position DONE just occupied — so a repeated tap in that
+     * spot backs out instead of completing the nag by accident. Never re-alerts.
      */
     fun showConfirm(context: Context, nag: Nag) {
         val notification = baseBuilder(context, nag, alertAgain = false)
             .setContentText("Mark this done? This stops the nagging.")
             .addAction(
-                0, "Yes, done",
-                actionIntent(context, nag, NagActionReceiver.ACTION_DONE_CONFIRM),
-            )
-            .addAction(
                 0, "Not yet",
                 actionIntent(context, nag, NagActionReceiver.ACTION_DONE_CANCEL),
+            )
+            .addAction(
+                0, "Yes, done",
+                actionIntent(context, nag, NagActionReceiver.ACTION_DONE_CONFIRM),
             )
             .build()
 

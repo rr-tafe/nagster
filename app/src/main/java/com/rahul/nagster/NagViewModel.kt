@@ -33,7 +33,7 @@ class NagViewModel(app: Application) : AndroidViewModel(app) {
     fun setEnabled(nag: Nag, enabled: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
             val updated = NagStore.upsert(
-                nag.copy(enabled = enabled, activeSince = null, snoozedUntil = null)
+                nag.copy(enabled = enabled, activeSince = null)
             )
             if (!enabled) Notifications.cancel(ctx, nag.id)
             Scheduler.reschedule(ctx, updated)
