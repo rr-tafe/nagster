@@ -49,6 +49,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -125,6 +126,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.viewinterop.AndroidView
@@ -329,6 +331,14 @@ fun ListScreen(
                             contentDescription = "Theme: ${data.themeMode.lowercase()}",
                         )
                     }
+                    // Compact label rather than an icon: nothing pictorial
+                    // distinguishes 12- from 24-hour time.
+                    TextButton(onClick = { vm.setUse24Hour(!use24Hour) }) {
+                        Text(
+                            if (use24Hour) "24h" else "12h",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
                     IconButton(onClick = onHistory) {
                         Icon(Icons.Filled.History, contentDescription = "History")
                     }
@@ -366,7 +376,7 @@ fun ListScreen(
             if (!batteryOk) {
                 item {
                     WarningCard(
-                        text = "Battery optimization may delay nags.",
+                        text = "Battery optimisation may delay nags.",
                         buttonText = "Exempt",
                     ) {
                         context.startActivity(
@@ -953,6 +963,9 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                         value = text,
                         onValueChange = { text = it },
                         placeholder = { Text("e.g. Take medication after dinner") },
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Sentences,
+                        ),
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -1097,25 +1110,6 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                     }
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "Time format",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    SingleChoiceSegmentedButtonRow {
-                        listOf(false to "AM/PM", true to "24h").forEachIndexed { i, (is24, label) ->
-                            SegmentedButton(
-                                selected = use24Hour == is24,
-                                onClick = { vm.setUse24Hour(is24) },
-                                shape = SegmentedButtonDefaults.itemShape(index = i, count = 2),
-                            ) { Text(label) }
-                        }
-                    }
-                }
             }
 
             SectionCard("Persistence Rules") {
