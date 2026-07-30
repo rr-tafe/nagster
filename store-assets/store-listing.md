@@ -60,10 +60,10 @@ emailrahulr@gmail.com
 ## Assets in this folder
 - `icon-512.png` — store icon (512×512)
 - `feature-1024x500.png` — feature graphic (1024×500)
-- `screenshots/` — 5 phone screenshots (960×2142 PNG), captured on a Pixel 9 Pro running v1.6:
-  1. `01-nag-list.png` — nag list, one nag actively nagging
-  2. `02-notification.png` — heads-up notification with DONE
-     (STALE as of v1.8 — still shows the removed Snooze action; recapture)
-  3. `03-edit-schedule.png` — Edit Nag: text + Schedule card
-  4. `04-edit-persistence.png` — Persistence Rules carousels
-  5. `05-history.png` — confirmation history
+- `screenshots/` — 6 phone screenshots (960×1706 PNG, 16:9), captured on a Pixel 9 Pro running v1.14. Status bar cropped off every shot (Play caps phone screenshots at a 2:1 max:min side ratio; raw 960×2142 captures exceed it, and cropping also keeps personal notification icons off the assets):
+  1. `01-nag-list.png` — nag list with emoji/colour badges, one nag actively nagging
+  2. `02-notification.png` — notification shade showing DONE
+  3. `03-edit-nag.png` — Edit Nag: emoji circle, text, colour, Schedule card
+  4. `04-persistence-rules.png` — Persistence Rules carousels
+  5. `05-emoji-picker.png` — in-app emoji picker dialog
+  6. `06-history.png` — confirmation history
