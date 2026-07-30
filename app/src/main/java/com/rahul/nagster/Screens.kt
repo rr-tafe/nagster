@@ -17,6 +17,8 @@ import android.view.HapticFeedbackConstants
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -59,6 +61,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.MusicNote
@@ -77,7 +80,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -107,6 +112,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
@@ -117,7 +123,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.emoji2.emojipicker.EmojiPickerView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -736,6 +747,21 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
 
     var timePickerTarget by remember { mutableStateOf<String?>(null) }
     var datePickerTarget by remember { mutableStateOf<String?>(null) }
+    var showEmojiPicker by remember { mutableStateOf(false) }
+
+    if (showEmojiPicker) {
+        EmojiPickerSheet(
+            onPicked = {
+                emoji = it
+                showEmojiPicker = false
+            },
+            onClear = {
+                emoji = ""
+                showEmojiPicker = false
+            },
+            onDismiss = { showEmojiPicker = false },
+        )
+    }
 
     val intervalTotal = (intervalH * 60 + intervalM).coerceAtLeast(1)
     val giveUpTotal = (giveUpD * 24 * 60 + giveUpH * 60 + giveUpM).coerceAtLeast(5)
@@ -909,13 +935,10 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    OutlinedTextField(
-                        value = emoji,
-                        onValueChange = { emoji = firstGrapheme(it) },
-                        placeholder = { Text("🙂") },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.width(88.dp),
+                    EmojiCircle(
+                        emoji = emoji,
+                        colorArgb = colorArgb,
+                        onClick = { showEmojiPicker = true },
                     )
                     OutlinedTextField(
                         value = text,
@@ -924,42 +947,27 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                         modifier = Modifier.weight(1f),
                     )
                 }
-                Text(
-                    "Optional: tap the small box and switch to your emoji keyboard.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
 
-                Text("Colour (optional)", style = MaterialTheme.typography.bodyMedium)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ExpandableRow(
+                    label = "Colour",
+                    summary = { ColorSwatch(color = colorArgb, selected = false, onClick = null) },
                 ) {
-                    ColorSwatch(
-                        color = null,
-                        selected = colorArgb == null,
-                        onClick = { colorArgb = null },
-                    )
-                    NAG_COLORS.forEach { swatch ->
-                        ColorSwatch(
-                            color = swatch,
-                            selected = colorArgb == swatch,
-                            onClick = { colorArgb = swatch },
-                        )
-                    }
-                }
-
-                if (emoji.isNotEmpty() || colorArgb != null) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        NagBadge(emoji = emoji, colorArgb = colorArgb, size = 40.dp)
-                        Text(
-                            "Shown on the notification and in your list",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ColorSwatch(
+                            color = null,
+                            selected = colorArgb == null,
+                            onClick = { colorArgb = null },
                         )
+                        NAG_COLORS.forEach { swatch ->
+                            ColorSwatch(
+                                color = swatch,
+                                selected = colorArgb == swatch,
+                                onClick = { colorArgb = swatch },
+                            )
+                        }
                     }
                 }
             }
@@ -1146,6 +1154,27 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
     }
 }
 
+/**
+ * Emoji glyphs carry their own font padding, which throws off naive centring —
+ * disabling it and pinning line height to the glyph size keeps them dead centre.
+ */
+@Composable
+private fun CenteredEmoji(emoji: String, sizeDp: Float) {
+    Text(
+        emoji,
+        style = LocalTextStyle.current.copy(
+            fontSize = sizeDp.sp,
+            lineHeight = sizeDp.sp,
+            textAlign = TextAlign.Center,
+            platformStyle = PlatformTextStyle(includeFontPadding = false),
+            lineHeightStyle = LineHeightStyle(
+                alignment = LineHeightStyle.Alignment.Center,
+                trim = LineHeightStyle.Trim.Both,
+            ),
+        ),
+    )
+}
+
 /** The nag's emoji on a coloured circle — the same badge the notification draws. */
 @Composable
 private fun NagBadge(emoji: String, colorArgb: Int?, size: androidx.compose.ui.unit.Dp) {
@@ -1155,25 +1184,109 @@ private fun NagBadge(emoji: String, colorArgb: Int?, size: androidx.compose.ui.u
         modifier = Modifier.size(size),
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            if (emoji.isNotEmpty()) CenteredEmoji(emoji, size.value * 0.5f)
+        }
+    }
+}
+
+/** Tappable circle standing in for the emoji field; opens the picker sheet. */
+@Composable
+private fun EmojiCircle(emoji: String, colorArgb: Int?, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = if (emoji.isEmpty() && colorArgb == null) {
+            MaterialTheme.colorScheme.surfaceVariant
+        } else {
+            Color(colorArgb ?: NAG_BADGE_NEUTRAL)
+        },
+        modifier = Modifier.size(56.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             if (emoji.isNotEmpty()) {
-                Text(emoji, fontSize = (size.value * 0.5f).sp)
+                CenteredEmoji(emoji, 28f)
+            } else {
+                Icon(
+                    Icons.Filled.EmojiEmotions,
+                    contentDescription = "Choose an emoji",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
 }
 
+/** The full AndroidX emoji catalogue, since the IME can't be forced into emoji mode. */
 @Composable
-private fun ColorSwatch(color: Int?, selected: Boolean, onClick: () -> Unit) {
+private fun EmojiPickerSheet(
+    onPicked: (String) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Choose an emoji",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onClear) { Text("Remove") }
+        }
+        AndroidView(
+            factory = { ctx ->
+                EmojiPickerView(ctx).apply {
+                    emojiGridColumns = 9
+                    setOnEmojiPickedListener { picked -> onPicked(picked.emoji) }
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(360.dp),
+        )
+    }
+}
+
+/** Collapsed-by-default section with a chevron that rotates when opened. */
+@Composable
+private fun ExpandableRow(
+    label: String,
+    summary: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val rotation by animateFloatAsState(if (expanded) 90f else 0f, label = "chevron")
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            summary()
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = if (expanded) "Collapse" else "Expand",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.rotate(rotation),
+            )
+        }
+        AnimatedVisibility(expanded) { content() }
+    }
+}
+
+@Composable
+private fun ColorSwatch(color: Int?, selected: Boolean, onClick: (() -> Unit)?) {
     val ring = if (selected) 3.dp else 0.dp
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = color?.let { Color(it) } ?: MaterialTheme.colorScheme.surfaceVariant,
-        border = if (selected) {
-            BorderStroke(ring, MaterialTheme.colorScheme.onSurface)
-        } else null,
-        modifier = Modifier.size(40.dp),
-    ) {
+    val shared: @Composable () -> Unit = {
         // The "no colour" swatch is the only one that needs a glyph.
         if (color == null) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
@@ -1186,6 +1299,23 @@ private fun ColorSwatch(color: Int?, selected: Boolean, onClick: () -> Unit) {
             }
         }
     }
+    if (onClick == null) {
+        Surface(
+            shape = CircleShape,
+            color = color?.let { Color(it) } ?: MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.size(28.dp),
+        ) { shared() }
+        return
+    }
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = color?.let { Color(it) } ?: MaterialTheme.colorScheme.surfaceVariant,
+        border = if (selected) {
+            BorderStroke(ring, MaterialTheme.colorScheme.onSurface)
+        } else null,
+        modifier = Modifier.size(40.dp),
+    ) { shared() }
 }
 
 @Composable
