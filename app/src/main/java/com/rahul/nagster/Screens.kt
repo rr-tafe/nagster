@@ -93,6 +93,7 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -117,6 +118,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -226,13 +230,31 @@ fun ListScreen(
     val data by vm.data.collectAsState()
     val context = LocalContext.current
 
-    var exactAlarmsOk by remember { mutableStateOf(true) }
-    var batteryOk by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) {
-        exactAlarmsOk = context.getSystemService(AlarmManager::class.java)
-            .canScheduleExactAlarms()
-        batteryOk = context.getSystemService(PowerManager::class.java)
-            .isIgnoringBatteryOptimizations(context.packageName)
+    fun exactAlarmsAllowed() =
+        context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+
+    fun batteryExempt() = context.getSystemService(PowerManager::class.java)
+        .isIgnoringBatteryOptimizations(context.packageName)
+
+    var exactAlarmsOk by remember { mutableStateOf(exactAlarmsAllowed()) }
+    var batteryOk by remember { mutableStateOf(batteryExempt()) }
+
+    // Granting these happens in system Settings, so the only reliable moment to
+    // re-check is when we come back to the foreground.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val exactNow = exactAlarmsAllowed()
+                // Anything queued while the permission was missing was scheduled
+                // inexactly; re-arm it now that we can be precise.
+                if (exactNow && !exactAlarmsOk) vm.rescheduleAll()
+                exactAlarmsOk = exactNow
+                batteryOk = batteryExempt()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     val soundPicker = rememberLauncherForActivityResult(

@@ -52,6 +52,13 @@ class NagViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Re-arm every nag, e.g. once exact-alarm permission is finally granted. */
+    fun rescheduleAll() {
+        viewModelScope.launch(Dispatchers.IO) {
+            Scheduler.rescheduleAll(ctx)
+        }
+    }
+
     fun setSoundUri(soundUri: String?) {
         viewModelScope.launch(Dispatchers.IO) {
             NagStore.setSoundUri(soundUri)
