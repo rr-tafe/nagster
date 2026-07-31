@@ -16,7 +16,15 @@ class NagViewModel(app: Application) : AndroidViewModel(app) {
 
     fun save(nag: Nag, onSaved: () -> Unit = {}) {
         viewModelScope.launch(Dispatchers.IO) {
-            val saved = NagStore.upsert(nag)
+            // Saving ends any in-progress nagging session rather than carrying it
+            // through unchanged. Without this, editing a nag's schedule while it
+            // was actively firing (e.g. moving the date to next week) left the
+            // old session running on its interval alone, ignoring the new
+            // schedule entirely. rescheduleAfterEdit below re-evaluates from
+            // scratch and restarts immediately only if the new schedule still
+            // calls for it.
+            val saved = NagStore.upsert(nag.copy(activeSince = null))
+            Notifications.cancel(ctx, saved.id)
             Scheduler.rescheduleAfterEdit(ctx, saved)
             withContext(Dispatchers.Main) { onSaved() }
         }
