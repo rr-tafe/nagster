@@ -5,11 +5,24 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 
 object Scheduler {
     const val ACTION_FIRE = "com.rahul.nagster.action.FIRE"
     const val ACTION_REVERT_CONFIRM = "com.rahul.nagster.action.REVERT_CONFIRM"
     const val EXTRA_NAG_ID = "nag_id"
+
+    /**
+     * canScheduleExactAlarms() only exists from API 31 onward. Before that,
+     * exact alarms had no permission gate at all — any app could schedule
+     * them — so there is nothing to check and we're always "allowed".
+     */
+    fun canScheduleExactAlarms(context: Context): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+        } else {
+            true
+        }
 
     /** How long the "confirm done?" step waits before reverting to the nag. */
     private const val CONFIRM_TIMEOUT_MS = 15_000L
@@ -105,7 +118,7 @@ object Scheduler {
         val pi = firePendingIntent(context, nag.id)
         am.cancel(pi)
         if (triggerAt == null) return
-        if (am.canScheduleExactAlarms()) {
+        if (canScheduleExactAlarms(context)) {
             am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
         } else {
             am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)

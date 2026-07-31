@@ -11,6 +11,7 @@ import android.app.AlarmManager
 import android.content.Intent
 import android.media.RingtoneManager
 import android.net.Uri
+import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import android.view.HapticFeedbackConstants
@@ -70,6 +71,8 @@ import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
@@ -156,6 +159,13 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlinx.coroutines.delay
 
+// Dynamic (wallpaper-derived) colour needs API 31. Below that, fall back to a
+// fixed scheme built from the same purple used for the launcher icon and
+// feature graphic, so the app still looks intentionally themed rather than
+// like a default Compose starter app.
+private val FallbackDarkScheme = darkColorScheme(primary = Color(0xFFCFBCFF))
+private val FallbackLightScheme = lightColorScheme(primary = Color(0xFF6750A4))
+
 @Composable
 fun NagsterTheme(content: @Composable () -> Unit) {
     val data by NagStore.data.collectAsState()
@@ -165,10 +175,10 @@ fun NagsterTheme(content: @Composable () -> Unit) {
         else -> isSystemInDarkTheme()
     }
     val context = LocalContext.current
-    val scheme = if (dark) {
-        dynamicDarkColorScheme(context)
+    val scheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else {
-        dynamicLightColorScheme(context)
+        if (dark) FallbackDarkScheme else FallbackLightScheme
     }
     MaterialTheme(colorScheme = scheme, content = content)
 }
@@ -251,8 +261,7 @@ fun ListScreen(
     val context = LocalContext.current
     val use24Hour = rememberUse24Hour(data.use24Hour)
 
-    fun exactAlarmsAllowed() =
-        context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+    fun exactAlarmsAllowed() = Scheduler.canScheduleExactAlarms(context)
 
     fun batteryExempt() = context.getSystemService(PowerManager::class.java)
         .isIgnoringBatteryOptimizations(context.packageName)
@@ -282,8 +291,15 @@ fun ListScreen(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            val picked = result.data
-                ?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+            // The typed two-arg overload needs API 33; below that, the plain
+            // getParcelableExtra(name) is deprecated but the only option.
+            val picked = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                result.data
+                    ?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI) as? Uri
+            }
             vm.setSoundUri(picked?.toString())
         }
     }

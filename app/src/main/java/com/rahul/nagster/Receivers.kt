@@ -3,9 +3,11 @@ package com.rahul.nagster
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
+import android.os.Vibrator
 import android.os.VibratorManager
 import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
@@ -23,21 +25,37 @@ private fun BroadcastReceiver.async(block: suspend () -> Unit) {
     }
 }
 
-/** A crisp rise-and-click buzz plus a confirmation toast when a nag is confirmed done. */
+/** VibratorManager only exists from API 31 — fall back to the plain Vibrator service. */
+private fun getVibrator(context: Context): Vibrator =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        context.getSystemService(VibratorManager::class.java).defaultVibrator
+    } else {
+        context.getSystemService(Vibrator::class.java)
+    }
+
+/**
+ * A crisp rise-and-click buzz plus a confirmation toast when a nag is confirmed
+ * done. The fancy effects are recent APIs, so this tiers down gracefully:
+ * composition primitives (API 30+) -> a predefined double-click (API 29+) ->
+ * a plain one-shot buzz, which is all that's available down to API 26.
+ */
 private fun doneFeedback(context: Context, nag: Nag) {
     runCatching {
-        val vibrator = context.getSystemService(VibratorManager::class.java).defaultVibrator
-        val effect = if (vibrator.areAllPrimitivesSupported(
-                VibrationEffect.Composition.PRIMITIVE_QUICK_RISE,
-                VibrationEffect.Composition.PRIMITIVE_CLICK,
-            )
-        ) {
-            VibrationEffect.startComposition()
-                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_QUICK_RISE, 0.6f)
-                .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, 1.0f, 50)
-                .compose()
-        } else {
-            VibrationEffect.createPredefined(VibrationEffect.EFFECT_DOUBLE_CLICK)
+        val vibrator = getVibrator(context)
+        val effect = when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                vibrator.areAllPrimitivesSupported(
+                    VibrationEffect.Composition.PRIMITIVE_QUICK_RISE,
+                    VibrationEffect.Composition.PRIMITIVE_CLICK,
+                ) ->
+                VibrationEffect.startComposition()
+                    .addPrimitive(VibrationEffect.Composition.PRIMITIVE_QUICK_RISE, 0.6f)
+                    .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, 1.0f, 50)
+                    .compose()
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
+                VibrationEffect.createPredefined(VibrationEffect.EFFECT_DOUBLE_CLICK)
+            else ->
+                VibrationEffect.createOneShot(120, VibrationEffect.DEFAULT_AMPLITUDE)
         }
         vibrator.vibrate(effect)
     }
