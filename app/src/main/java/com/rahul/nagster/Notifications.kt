@@ -82,9 +82,15 @@ object Notifications {
                 textSize = size * 0.55f
                 textAlign = Paint.Align.CENTER
             }
-            val metrics = textPaint.fontMetrics
+            // Emoji are coloured bitmap glyphs, not outlines — the font's nominal
+            // ascent/descent (sized for the whole character set, including tall
+            // accents) sits well above the glyph's actual ink, which is what
+            // pushed the badge toward the top. Measuring this glyph's own bounds
+            // centres on what's actually drawn.
+            val bounds = android.graphics.Rect()
+            textPaint.getTextBounds(nag.emoji, 0, nag.emoji.length, bounds)
             canvas.drawText(
-                nag.emoji, half, half - (metrics.ascent + metrics.descent) / 2f, textPaint
+                nag.emoji, half, half - (bounds.top + bounds.bottom) / 2f, textPaint
             )
         }
         return bitmap
