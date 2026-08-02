@@ -13,6 +13,10 @@ const val MODE_ROUTINE = "ROUTINE"
 const val MODE_DATES = "DATES"
 const val MODE_ONCE = "ONCE"
 
+const val GIVEUP_NEVER = "NEVER"
+const val GIVEUP_DURATION = "DURATION"
+const val GIVEUP_TIME = "TIME"
+
 const val THEME_SYSTEM = "SYSTEM"
 const val THEME_LIGHT = "LIGHT"
 const val THEME_DARK = "DARK"
@@ -76,8 +80,13 @@ data class Nag(
     /** ISO day-of-week values (1 = Monday .. 7 = Sunday); used in MODE_ROUTINE. */
     val daysOfWeek: Set<Int> = (1..7).toSet(),
     val intervalMinutes: Int = 10,
-    /** 0 = never give up. */
+    /** Used when effectiveGiveUpMode is GIVEUP_DURATION. 0 = never give up. */
     val giveUpAfterMinutes: Int = 0,
+    /** GIVEUP_NEVER, GIVEUP_DURATION or GIVEUP_TIME. Blank = derived, for back-compat. */
+    val giveUpMode: String = "",
+    /** Wall-clock give-up time; used when effectiveGiveUpMode is GIVEUP_TIME. */
+    val giveUpHour: Int? = null,
+    val giveUpMinute: Int? = null,
     val enabled: Boolean = true,
     /** Epoch millis when the current nagging session started; null = idle. */
     val activeSince: Long? = null,
@@ -98,6 +107,45 @@ data class Nag(
             daysOfWeek.isEmpty() -> MODE_ONCE
             else -> MODE_ROUTINE
         }
+
+    val effectiveGiveUpMode: String
+        get() = when {
+            giveUpMode.isNotBlank() -> giveUpMode
+            giveUpAfterMinutes > 0 -> GIVEUP_DURATION
+            else -> GIVEUP_NEVER
+        }
+
+    /**
+     * A GIVEUP_TIME give-up must land later in the day than the nag's own start
+     * time. Rolling an earlier-or-equal time to "tomorrow" was considered and
+     * rejected: it produces give-up windows pushing 24 hours long and can overlap
+     * the next scheduled occurrence, tangling two sessions together. Same-day-only
+     * is simpler and matches what "give up at 9pm" actually means to someone
+     * reading it.
+     */
+    val giveUpAtOrBeforeStart: Boolean
+        get() = effectiveGiveUpMode == GIVEUP_TIME && giveUpHour != null &&
+            (giveUpHour < hour || (giveUpHour == hour && (giveUpMinute ?: 0) <= minute))
+
+    /**
+     * Absolute deadline for a nagging session that began at [occurrenceStart], or
+     * null if this nag never gives up. GIVEUP_TIME is resolved against the
+     * calendar date of [occurrenceStart] — always today for both liveMissedStart's
+     * same-day check and a live AlarmReceiver session, since give-up is
+     * constrained to be same-day-only (see giveUpAtOrBeforeStart).
+     */
+    fun giveUpBoundMillis(occurrenceStart: Long): Long? {
+        val zone = ZoneId.systemDefault()
+        return when (effectiveGiveUpMode) {
+            GIVEUP_DURATION ->
+                if (giveUpAfterMinutes > 0) occurrenceStart + giveUpAfterMinutes * 60_000L else null
+            GIVEUP_TIME -> giveUpHour?.let { h ->
+                Instant.ofEpochMilli(occurrenceStart).atZone(zone).toLocalDate()
+                    .atTime(h, giveUpMinute ?: 0).atZone(zone).toInstant().toEpochMilli()
+            }
+            else -> null
+        }
+    }
 
     /** Next moment this nag's schedule begins, or null if it never will again. */
     fun nextStartMillis(now: Long = System.currentTimeMillis()): Long? {
@@ -162,8 +210,7 @@ data class Nag(
                 ?.atTime(endHour ?: 23, endMinute ?: 59)
                 ?.atZone(zone)?.toInstant()?.toEpochMilli()
         } else null
-        val giveUpMillis =
-            if (giveUpAfterMinutes > 0) fire + giveUpAfterMinutes * 60_000L else null
+        val giveUpMillis = giveUpBoundMillis(fire)
         val bound = when {
             endMillis != null && giveUpMillis != null -> minOf(endMillis, giveUpMillis)
             endMillis != null -> endMillis

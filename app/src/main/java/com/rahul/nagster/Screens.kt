@@ -698,9 +698,13 @@ private fun Modifier.scrollHints(state: LazyListState, fadeWidth: Float): Modifi
 @Composable
 private fun PresetCarousel(
     presets: List<Pair<Int, String>>,
-    selected: Int?, // null = Custom
+    selected: Int?,
     onSelect: (Int) -> Unit,
     onCustom: () -> Unit,
+    // Explicit rather than inferred from selected == null, so a caller with its
+    // own trailing chip (e.g. "At a time") can be neither a preset nor Custom.
+    customSelected: Boolean = selected == null,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val state = rememberLazyListState()
     val fadeWidth = with(LocalDensity.current) { 28.dp.toPx() }
@@ -723,10 +727,13 @@ private fun PresetCarousel(
             }
             item {
                 FilterChip(
-                    selected = selected == null,
+                    selected = customSelected,
                     onClick = onCustom,
                     label = { Text("Custom…") },
                 )
+            }
+            if (trailing != null) {
+                item { trailing() }
             }
         }
         if (moreToTheRight) {
@@ -772,6 +779,9 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
 
     val existingGiveUp = existing?.giveUpAfterMinutes ?: 0
     val giveUpPresetValues = remember { listOf(0) + minutePresets }
+    var giveUpAtTime by remember {
+        mutableStateOf((existing?.effectiveGiveUpMode ?: GIVEUP_NEVER) == GIVEUP_TIME)
+    }
     var giveUpCustom by remember { mutableStateOf(existingGiveUp !in giveUpPresetValues) }
     var giveUpPreset by remember {
         mutableStateOf(if (existingGiveUp in giveUpPresetValues) existingGiveUp else 0)
@@ -779,6 +789,15 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
     var giveUpD by remember { mutableStateOf(existingGiveUp / (24 * 60)) }
     var giveUpH by remember { mutableStateOf((existingGiveUp % (24 * 60)) / 60) }
     var giveUpM by remember { mutableStateOf(if (existingGiveUp == 0) 0 else existingGiveUp % 60) }
+    // Defaults to an hour after the nag's own start time, same-day only (see
+    // Nag.giveUpAtOrBeforeStart) — clamped so the default is never invalid even
+    // for a nag starting late in the evening.
+    var giveUpAtHour by remember {
+        mutableStateOf(existing?.giveUpHour ?: if (hour >= 23) 23 else hour + 1)
+    }
+    var giveUpAtMinute by remember {
+        mutableStateOf(existing?.giveUpMinute ?: if (hour >= 23) 59 else minute)
+    }
 
     var timePickerTarget by remember { mutableStateOf<String?>(null) }
     var datePickerTarget by remember { mutableStateOf<String?>(null) }
@@ -806,6 +825,7 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
         (mode != MODE_DATES || dates.isNotEmpty())
 
     var wontFireWarning by remember { mutableStateOf(false) }
+    var giveUpTooEarlyWarning by remember { mutableStateOf(false) }
 
     fun buildNag(): Nag = (existing ?: Nag()).copy(
         text = text.trim(),
@@ -821,7 +841,11 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
         endHour = if (endDate != null) endHour else null,
         endMinute = if (endDate != null) endMinute else null,
         intervalMinutes = intervalTotal,
-        giveUpAfterMinutes = effectiveGiveUp,
+        giveUpMode = if (giveUpAtTime) GIVEUP_TIME
+        else if (effectiveGiveUp > 0) GIVEUP_DURATION else GIVEUP_NEVER,
+        giveUpAfterMinutes = if (giveUpAtTime) 0 else effectiveGiveUp,
+        giveUpHour = if (giveUpAtTime) giveUpAtHour else null,
+        giveUpMinute = if (giveUpAtTime) giveUpAtMinute else null,
         enabled = true,
     )
 
@@ -852,11 +876,38 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
         )
     }
 
+    if (giveUpTooEarlyWarning) {
+        AlertDialog(
+            onDismissRequest = { giveUpTooEarlyWarning = false },
+            title = { Text("This nag will give up almost immediately") },
+            text = {
+                Text(
+                    "Your give-up time (${formatClock(giveUpAtHour, giveUpAtMinute, use24Hour)}) " +
+                        "isn't after the nag's start time (${formatClock(hour, minute, use24Hour)}), " +
+                        "so it will stop nagging right after it fires. Pick a give-up time later " +
+                        "in the day, or save anyway if that's what you want."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    giveUpTooEarlyWarning = false
+                }) { Text("Go back and fix") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    giveUpTooEarlyWarning = false
+                    persist()
+                }) { Text("Save anyway") }
+            },
+        )
+    }
+
     if (timePickerTarget != null) {
         val isEnd = timePickerTarget == "END"
+        val isGiveUp = timePickerTarget == "GIVEUP"
         val state = rememberTimePickerState(
-            initialHour = if (isEnd) endHour ?: 23 else hour,
-            initialMinute = if (isEnd) endMinute ?: 59 else minute,
+            initialHour = if (isEnd) endHour ?: 23 else if (isGiveUp) giveUpAtHour else hour,
+            initialMinute = if (isEnd) endMinute ?: 59 else if (isGiveUp) giveUpAtMinute else minute,
             is24Hour = use24Hour,
         )
         AlertDialog(
@@ -866,6 +917,9 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                     if (isEnd) {
                         endHour = state.hour
                         endMinute = state.minute
+                    } else if (isGiveUp) {
+                        giveUpAtHour = state.hour
+                        giveUpAtMinute = state.minute
                     } else {
                         hour = state.hour
                         minute = state.minute
@@ -946,7 +1000,12 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
             FloatingActionButton(
                 onClick = {
                     if (!valid) return@FloatingActionButton
-                    if (buildNag().willNeverFire()) wontFireWarning = true else persist()
+                    val built = buildNag()
+                    when {
+                        built.willNeverFire() -> wontFireWarning = true
+                        built.giveUpAtOrBeforeStart -> giveUpTooEarlyWarning = true
+                        else -> persist()
+                    }
                 },
                 containerColor = if (valid) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.surfaceVariant,
@@ -1158,14 +1217,32 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
                 Text("Give up after", style = MaterialTheme.typography.bodyMedium)
                 PresetCarousel(
                     presets = listOf(0 to "Never") + minutePresets.map { it to "${it}m" },
-                    selected = if (giveUpCustom) null else giveUpPreset,
+                    selected = if (giveUpAtTime || giveUpCustom) null else giveUpPreset,
+                    customSelected = !giveUpAtTime && giveUpCustom,
                     onSelect = {
+                        giveUpAtTime = false
                         giveUpCustom = false
                         giveUpPreset = it
                     },
-                    onCustom = { giveUpCustom = true },
+                    onCustom = {
+                        giveUpAtTime = false
+                        giveUpCustom = true
+                    },
+                    trailing = {
+                        FilterChip(
+                            selected = giveUpAtTime,
+                            onClick = { giveUpAtTime = true },
+                            label = { Text("At a time…") },
+                        )
+                    },
                 )
-                if (giveUpCustom) {
+                if (giveUpAtTime) {
+                    TimeRow(
+                        label = "Give up at",
+                        timeValue = formatClock(giveUpAtHour, giveUpAtMinute, use24Hour),
+                        onClick = { timePickerTarget = "GIVEUP" },
+                    )
+                } else if (giveUpCustom) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1181,8 +1258,12 @@ fun EditScreen(vm: NagViewModel, nagId: Long, onClose: () -> Unit) {
 
                 Text(
                     "↻ Repeats every ${formatMinutes(intervalTotal)} until completed · " +
-                        if (effectiveGiveUp == 0) "never gives up"
-                        else "gives up after ${formatMinutes(effectiveGiveUp)}",
+                        when {
+                            giveUpAtTime ->
+                                "gives up at ${formatClock(giveUpAtHour, giveUpAtMinute, use24Hour)}"
+                            effectiveGiveUp == 0 -> "never gives up"
+                            else -> "gives up after ${formatMinutes(effectiveGiveUp)}"
+                        },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )

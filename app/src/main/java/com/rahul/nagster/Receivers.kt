@@ -111,9 +111,8 @@ class AlarmReceiver : BroadcastReceiver() {
                 nag = NagStore.upsert(nag.copy(activeSince = now))
             }
 
-            if (nag.giveUpAfterMinutes > 0 &&
-                now - (nag.activeSince ?: now) >= nag.giveUpAfterMinutes * 60_000L
-            ) {
+            val deadline = nag.giveUpBoundMillis(nag.activeSince ?: now)
+            if (deadline != null && now >= deadline) {
                 finishSession(context, nag, logDone = false)
                 return@async
             }

@@ -119,10 +119,25 @@ object Notifications {
             .setAutoCancel(false)
             .setOnlyAlertOnce(!alertAgain)
 
+    private fun giveUpSuffix(context: Context, nag: Nag): String {
+        val use24 = NagStore.data.value.use24Hour
+            ?: android.text.format.DateFormat.is24HourFormat(context)
+        return when (nag.effectiveGiveUpMode) {
+            GIVEUP_DURATION -> " Gives up after ${formatMinutes(nag.giveUpAfterMinutes)}."
+            GIVEUP_TIME -> nag.giveUpHour?.let { h ->
+                " Gives up at ${formatClock(h, nag.giveUpMinute ?: 0, use24)}."
+            } ?: ""
+            else -> ""
+        }
+    }
+
     /** The normal nagging notification. DONE only arms the confirmation step. */
     fun show(context: Context, nag: Nag, alertAgain: Boolean = true) {
         val notification = baseBuilder(context, nag, alertAgain)
-            .setContentText("Nagging every ${formatMinutes(nag.intervalMinutes)} until you confirm")
+            .setContentText(
+                "Nagging every ${formatMinutes(nag.intervalMinutes)} until you confirm." +
+                    giveUpSuffix(context, nag)
+            )
             .addAction(0, "DONE", actionIntent(context, nag, NagActionReceiver.ACTION_DONE))
             .build()
 
